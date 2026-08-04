@@ -1,0 +1,98 @@
+{
+  "project_info": {
+    "project_number": "239862975990",
+    "project_id": "booknglow-1",
+    "storage_bucket": "booknglow-1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:239862975990:android:ec40e6c64e0c05d1bbcbd7",
+        "android_client_info": {
+          "package_name": "com.example.booknglow"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "239862975990-4ib0f4o54pk6an9ll3sl3fh5uvuj2o0a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.booknglow",
+            "certificate_hash": "32bf2bf26d05288986f8542eeff1afb868b20a7c"
+          }
+        },
+        {
+          "client_id": "239862975990-6icooenv7ku1bbj5agld551b9voo6rmq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.booknglow",
+            "certificate_hash": "8ed009fe098ea3da66155252efb24c1c9a52354b"
+          }
+        },
+        {
+          "client_id": "239862975990-joucjs51fjhja3eq84gi4e8ca72oo4kc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAQF-6LFdReOnyfJods6r7K6N5V872EDS8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "239862975990-35m7a5km1phgkrcojkidp2kpa9g5mtr6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "239862975990-376h5bcg6fdr1ottj9dfrhqo43ksjhr6.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.booknglow"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:239862975990:android:bdb6311ae99c509bbbcbd7",
+        "android_client_info": {
+          "package_name": "com.example.booknglow_partner"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "239862975990-joucjs51fjhja3eq84gi4e8ca72oo4kc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAQF-6LFdReOnyfJods6r7K6N5V872EDS8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "239862975990-35m7a5km1phgkrcojkidp2kpa9g5mtr6.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "239862975990-376h5bcg6fdr1ottj9dfrhqo43ksjhr6.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.booknglow"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
