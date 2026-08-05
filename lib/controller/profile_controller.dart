@@ -7,8 +7,10 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../view/help_and_support.dart';
 import '../view/login.dart';
 import '../view/salon_details.dart';
+import '../view/transaction_details.dart';
 
 class ProfileController extends GetxController {
   // Observable salon profile fields (loaded dynamically from Firestore)
@@ -66,7 +68,9 @@ class ProfileController extends GetxController {
   /// Fetches salon details from Cloud Firestore for current authenticated user
   Future<void> fetchSalonProfile() async {
     try {
-      isLoading.value = true;
+      if (salonName.value.isEmpty) {
+        isLoading.value = true;
+      }
       final User? currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser != null) {
         final DocumentSnapshot doc = await FirebaseFirestore.instance
@@ -329,36 +333,25 @@ class ProfileController extends GetxController {
   }
 
   void onTransactionDetailsTap() {
-    Get.snackbar(
-      'Transaction Details',
-      'View and manage your recent bookings and payment history.',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: const Color(0xFF041C16),
-      colorText: Colors.white,
-      duration: const Duration(seconds: 2),
-    );
+    Get.to(() => const TransactionDetailsView());
   }
 
   void onPayoutSettingsTap() {
     Get.snackbar(
-      'Payout Settings',
-      'Bank details and revenue reports',
+      'Coming Soon',
+      'Payout Settings & Direct Bank Transfers will be available in an upcoming update.',
       snackPosition: SnackPosition.BOTTOM,
       backgroundColor: const Color(0xFF041C16),
       colorText: Colors.white,
+      icon: const Icon(Icons.schedule_rounded, color: Color(0xFFEFE0D3)),
       duration: const Duration(seconds: 2),
+      margin: const EdgeInsets.all(16),
+      borderRadius: 12,
     );
   }
 
   void onHelpAndSupportTap() {
-    Get.snackbar(
-      'Help & Support',
-      'Get assistance and read FAQs',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: const Color(0xFF041C16),
-      colorText: Colors.white,
-      duration: const Duration(seconds: 2),
-    );
+    Get.to(() => const HelpAndSupportView());
   }
 
   /// Handles User Logout

@@ -10,8 +10,10 @@ class ServicesView extends GetView<ServicesController> {
 
   @override
   Widget build(BuildContext context) {
-    // Inject ServicesController
-    Get.put(ServicesController());
+    // Inject ServicesController safely
+    if (!Get.isRegistered<ServicesController>()) {
+      Get.put(ServicesController());
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9F8),

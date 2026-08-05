@@ -53,6 +53,18 @@ class BookingModel {
         .toString();
     final parsedServices = _parseServices(data['services']);
 
+    double calculatedPrice = _parsePrice(
+      data['totalPrice'] ??
+          data['price'] ??
+          data['amount'] ??
+          data['cost'] ??
+          data['total'] ??
+          data['priceTotal'],
+    );
+    if (calculatedPrice <= 0.0) {
+      calculatedPrice = parsedServices['total'] as double;
+    }
+
     return BookingModel(
       id: docId,
       clientName: name,
@@ -61,11 +73,7 @@ class BookingModel {
       time: data['time']?.toString() ?? '',
       date: data['date']?.toString() ?? '',
       services: parsedServices['names'] as List<String>,
-      totalPrice: (data['totalPrice'] is num)
-          ? (data['totalPrice'] as num).toDouble()
-          : ((parsedServices['total'] as double) > 0
-                ? (parsedServices['total'] as double)
-                : 0.0),
+      totalPrice: calculatedPrice,
       notes: data['notes']?.toString(),
       status:
           data['bookingStatus']?.toString() ??
@@ -80,6 +88,15 @@ class BookingModel {
       userId: data['userId']?.toString() ?? '',
       createdAt: data['createdAt'],
     );
+  }
+
+  static double _parsePrice(dynamic val) {
+    if (val is num) return val.toDouble();
+    if (val != null) {
+      final str = val.toString().replaceAll(RegExp(r'[^0-9.]'), '');
+      return double.tryParse(str) ?? 0.0;
+    }
+    return 0.0;
   }
 
   static String _generateInitials(String name) {
@@ -106,12 +123,13 @@ class BookingModel {
           if (sName.isNotEmpty) {
             serviceNames.add(sName);
           }
-          final priceVal = item['price'];
-          if (priceVal is num) {
-            total += priceVal.toDouble();
-          } else if (priceVal != null) {
-            total += (double.tryParse(priceVal.toString()) ?? 0.0);
-          }
+          final priceVal =
+              item['price'] ??
+              item['totalPrice'] ??
+              item['cost'] ??
+              item['amount'] ??
+              item['priceTotal'];
+          total += _parsePrice(priceVal);
         } else if (item is String) {
           serviceNames.add(item);
         }

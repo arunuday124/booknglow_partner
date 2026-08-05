@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../controller/bookings_controller.dart';
 import '../controller/dashboard_controller.dart';
+import '../controller/transaction_controller.dart';
 import 'bookings.dart';
 import 'profile.dart';
 import 'services.dart';
@@ -12,8 +14,10 @@ class DashboardView extends GetView<DashboardController> {
 
   @override
   Widget build(BuildContext context) {
-    // Inject DashboardController
-    Get.put(DashboardController());
+    // Inject DashboardController safely
+    if (!Get.isRegistered<DashboardController>()) {
+      Get.put(DashboardController());
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9F8),
@@ -57,24 +61,38 @@ class _DashboardHomeTab extends StatelessWidget {
         centerTitle: false,
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 20.0,
-            vertical: 16.0,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              _WelcomeTitleSection(),
-              SizedBox(height: 20),
-              _MetricsRowSection(),
-              SizedBox(height: 24),
-              _NextUpSection(),
-              SizedBox(height: 24),
-              _DailyLogsSection(),
-              SizedBox(height: 20),
-            ],
+        child: RefreshIndicator(
+          color: const Color(0xFF041C16),
+          onRefresh: () async {
+            // Trigger refresh for controllers when user scrolls down (pull-to-refresh)
+            if (Get.isRegistered<DashboardController>()) {
+              await Get.find<DashboardController>().fetchDashboardMetrics(force: true);
+            }
+            if (Get.isRegistered<BookingsController>()) {
+              await Get.find<BookingsController>().fetchBookings(force: true);
+            }
+            if (Get.isRegistered<TransactionController>()) {
+              await Get.find<TransactionController>().fetchTransactions(force: true);
+            }
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                _WelcomeTitleSection(),
+                SizedBox(height: 20),
+                _MetricsRowSection(),
+                SizedBox(height: 24),
+                _NextUpSection(),
+                SizedBox(height: 24),
+                _DailyLogsSection(),
+                SizedBox(height: 20),
+              ],
+            ),
           ),
         ),
       ),
@@ -93,7 +111,7 @@ class _WelcomeTitleSection extends GetView<DashboardController> {
       children: [
         Obx(
           () => Text(
-            'Hello, ${controller.salonName.value}',
+            'Hello, ${controller.firstName}',
             style: GoogleFonts.playfairDisplay(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -116,7 +134,7 @@ class _WelcomeTitleSection extends GetView<DashboardController> {
   }
 }
 
-/// Overview Metrics Cards Row (Revenue & Bookings)
+/// Overview Metrics Cards Row (Revenue, Bookings & Reviews)
 class _MetricsRowSection extends GetView<DashboardController> {
   const _MetricsRowSection();
 
@@ -126,24 +144,58 @@ class _MetricsRowSection extends GetView<DashboardController> {
       children: [
         // Revenue Card
         Expanded(
-          child: Obx(
-            () => _MetricCard(
+          child: Obx(() {
+            if (!Get.isRegistered<TransactionController>()) {
+              Get.put(TransactionController(), permanent: true);
+            }
+            final txnController = Get.find<TransactionController>();
+            final double total = txnController.totalRevenue;
+
+            String displayRevenue = '₹ 0';
+            if (total >= 100000) {
+              displayRevenue = '₹ ${(total / 100000).toStringAsFixed(1)}L';
+            } else if (total >= 1000) {
+              displayRevenue = '₹ ${(total / 1000).toStringAsFixed(1)}k';
+            } else if (total > 0) {
+              displayRevenue = '₹ ${total.toStringAsFixed(0)}';
+            }
+
+            return _MetricCard(
               title: 'REVENUE',
               icon: Icons.north_east_rounded,
-              value: controller.revenue.value,
+              value: displayRevenue,
               subText: controller.revenueGrowth.value,
-            ),
-          ),
+            );
+          }),
         ),
-        const SizedBox(width: 14),
+        const SizedBox(width: 10),
         // Bookings Card
+        Expanded(
+          child: Obx(() {
+            if (!Get.isRegistered<BookingsController>()) {
+              Get.put(BookingsController());
+            }
+            final bookingsCtrl = Get.find<BookingsController>();
+            final int total = bookingsCtrl.allBookingsCount;
+            final int pending = bookingsCtrl.pendingCount;
+
+            return _MetricCard(
+              title: 'BOOKINGS',
+              icon: Icons.calendar_today_outlined,
+              value: '$total',
+              subText: '$pending Pending',
+            );
+          }),
+        ),
+        const SizedBox(width: 10),
+        // Reviews Card
         Expanded(
           child: Obx(
             () => _MetricCard(
-              title: 'BOOKINGS',
-              icon: Icons.calendar_today_outlined,
-              value: '${controller.totalBookings.value}',
-              subText: '${controller.pendingBookings.value} Pending',
+              title: 'REVIEWS',
+              icon: Icons.star_border_rounded,
+              value: controller.reviewsRating.value,
+              subText: '${controller.totalReviews.value} Ratings',
             ),
           ),
         ),
@@ -169,7 +221,7 @@ class _MetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 14.0),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -188,23 +240,29 @@ class _MetricCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                title,
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                  color: const Color(0xFF4B5563),
+              Flexible(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                    color: const Color(0xFF4B5563),
+                  ),
                 ),
               ),
-              Icon(icon, size: 16, color: const Color(0xFF4B5563)),
+              Icon(icon, size: 15, color: const Color(0xFF4B5563)),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Text(
             value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.playfairDisplay(
-              fontSize: 22,
+              fontSize: 19,
               fontWeight: FontWeight.bold,
               color: const Color(0xFF041C16),
             ),
@@ -212,8 +270,10 @@ class _MetricCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             subText,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.inter(
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w500,
               color: const Color(0xFF5C5346),
             ),

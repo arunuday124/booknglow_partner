@@ -11,8 +11,10 @@ class ProfileView extends GetView<ProfileController> {
 
   @override
   Widget build(BuildContext context) {
-    // Inject ProfileController
-    Get.put(ProfileController());
+    // Inject ProfileController safely
+    if (!Get.isRegistered<ProfileController>()) {
+      Get.put(ProfileController());
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9F8),
@@ -242,6 +244,7 @@ class _ProfileOptionListSection extends GetView<ProfileController> {
           icon: Icons.account_balance_wallet_outlined,
           title: 'Payout Settings',
           subtitle: 'Bank details and revenue reports',
+          badgeText: 'Coming Soon',
           onTap: controller.onPayoutSettingsTap,
         ),
         const SizedBox(height: 12),
@@ -261,12 +264,14 @@ class _ProfileOptionTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+  final String? badgeText;
   final VoidCallback onTap;
 
   const _ProfileOptionTile({
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.badgeText,
     required this.onTap,
   });
 
@@ -300,13 +305,36 @@ class _ProfileOptionTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.inter(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF1F2937),
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.inter(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF1F2937),
+                        ),
+                      ),
+                      if (badgeText != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFE0D3),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            badgeText!.toUpperCase(),
+                            style: GoogleFonts.inter(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF5C4E3D),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 3),
                   Text(

@@ -71,7 +71,11 @@ class ServicesController extends GetxController {
   }
 
   /// Fetches existing services from Cloud Firestore for the logged in salon
-  Future<void> fetchServicesFromFirestore() async {
+  Future<void> fetchServicesFromFirestore({bool force = false}) async {
+    if (!force && services.isNotEmpty) {
+      return; // Preserve in-memory services cache without extra network calls
+    }
+
     try {
       final User? currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser != null) {

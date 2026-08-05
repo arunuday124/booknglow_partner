@@ -13,7 +13,9 @@ class AllBookingsView extends GetView<BookingsController> {
   @override
   Widget build(BuildContext context) {
     // Ensure controller is registered
-    final BookingsController controller = Get.put(BookingsController());
+    if (!Get.isRegistered<BookingsController>()) {
+      Get.put(BookingsController());
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9F8),
@@ -292,52 +294,53 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header Row
+                      // Header Row: Avatar, Name & Status Badge
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           _ClientAvatarItem(booking: booking),
                           const SizedBox(width: 14),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  booking.clientName,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF041C16),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    const Icon(
-                                      Icons.access_time_outlined,
-                                      size: 15,
-                                      color: Color(0xFF4B5563),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        '${booking.time}, ${booking.date}',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                          color: const Color(0xFF4B5563),
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                        maxLines: 1,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                            child: Text(
+                              booking.clientName,
+                              style: GoogleFonts.inter(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF041C16),
+                              ),
                             ),
                           ),
+                          const SizedBox(width: 8),
                           _StatusBadgeItem(status: booking.status),
                         ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Prominent Time & Date Pill Container
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3F4F6),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.access_time_filled_rounded,
+                              size: 15,
+                              color: Color(0xFF041C16),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${booking.time}  •  ${booking.date}',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF041C16),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 16),
                       const Divider(
@@ -379,30 +382,28 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                           );
                         }).toList(),
                       ),
-                      if (booking.totalPrice > 0) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Total Price',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: const Color(0xFF6B7280),
-                              ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Total Price',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF6B7280),
                             ),
-                            Text(
-                              '₹${booking.totalPrice.toInt()}',
-                              style: GoogleFonts.inter(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF041C16),
-                              ),
+                          ),
+                          Text(
+                            '₹${booking.totalPrice.toInt()}',
+                            style: GoogleFonts.inter(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFF041C16),
                             ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                       if (booking.notes != null &&
                           booking.notes!.isNotEmpty) ...[
                         const SizedBox(height: 6),

@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -23,10 +25,73 @@ class DashboardController extends GetxController {
 
   // Salon Details & Metrics
   final RxString salonName = 'Zen Salon'.obs;
+  final RxString ownerName = ''.obs;
   final RxString revenue = '₹ 42.8k'.obs;
   final RxString revenueGrowth = '+12% vs last week'.obs;
   final RxInt totalBookings = 24.obs;
   final RxInt pendingBookings = 8.obs;
+
+  // Reviews Metrics
+  final RxString reviewsRating = '4.8 ★'.obs;
+  final RxInt totalReviews = 128.obs;
+
+  /// Returns owner or salon first name (e.g. "Arunuday Debnath" -> "Arunuday")
+  String get firstName {
+    String name = ownerName.value.trim();
+    if (name.isEmpty) {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && user.displayName != null && user.displayName!.trim().isNotEmpty) {
+        name = user.displayName!.trim();
+      }
+    }
+    if (name.isEmpty) {
+      name = salonName.value.trim();
+    }
+    if (name.isEmpty) return 'Partner';
+    return name.split(RegExp(r'\s+')).first;
+  }
+
+  @override
+  void onInit() {
+    super.onInit();
+    fetchDashboardMetrics();
+  }
+
+  /// Fetches salon rating and review metrics dynamically from Firestore
+  Future<void> fetchDashboardMetrics({bool force = false}) async {
+    if (!force && salonName.value.isNotEmpty && ownerName.value.isNotEmpty) {
+      return; // Return immediately from memory without extra Firebase calls
+    }
+
+    try {
+      final User? user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final DocumentSnapshot doc = await FirebaseFirestore.instance
+            .collection('salons')
+            .doc(user.uid)
+            .get();
+
+        if (doc.exists && doc.data() != null) {
+          final data = doc.data() as Map<String, dynamic>;
+          if (data['ownerName'] != null && data['ownerName'].toString().isNotEmpty) {
+            ownerName.value = data['ownerName'].toString();
+          }
+          if (data['salonName'] != null && data['salonName'].toString().isNotEmpty) {
+            salonName.value = data['salonName'].toString();
+          }
+          if (data['ratings'] != null) {
+            final double r = double.tryParse(data['ratings'].toString()) ?? 4.8;
+            reviewsRating.value = '${r.toStringAsFixed(1)} ★';
+          }
+          if (data['reviews'] != null) {
+            totalReviews.value = int.tryParse(data['reviews'].toString()) ?? 128;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching dashboard metrics: $e');
+    }
+  }
 
   // Next Up Booking Details
   final RxString nextClientName = 'Ananya Sharma'.obs;

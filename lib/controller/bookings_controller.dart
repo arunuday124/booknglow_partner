@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../model/booking_model.dart';
 import '../view/all_bookings.dart';
+import 'transaction_controller.dart';
 
 /// GetX Controller managing bookings state and actions with real-time Firestore integration
 class BookingsController extends GetxController {
@@ -43,117 +44,11 @@ class BookingsController extends GetxController {
   // All pending bookings cache for dynamic queue management
   final RxList<BookingModel> _allPendingBookings = <BookingModel>[].obs;
 
-  // Initial sample bookings list to ensure queue functionality works out-of-the-box
-  final List<BookingModel> _sampleBookings = [
-    BookingModel(
-      id: 'bk_1',
-      clientName: 'Sarah Jenkins',
-      time: '10:30 AM',
-      date: 'Today, 04 Aug',
-      services: ['Signature HydraFacial', 'Eyebrow Threading'],
-      totalPrice: 2499,
-      notes: 'Please ensure sensitive skin products are used.',
-      status: 'Pending',
-      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
-    ),
-    BookingModel(
-      id: 'bk_2',
-      clientName: 'Priya Sharma',
-      time: '11:45 AM',
-      date: 'Today, 04 Aug',
-      services: ['L\'Oreal Hair Spa', 'Hair Cut & Blowdry'],
-      totalPrice: 1850,
-      notes: 'Prefers senior stylist if available.',
-      status: 'Pending',
-      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
-    ),
-    BookingModel(
-      id: 'bk_3',
-      clientName: 'Anita Roy',
-      time: '01:15 PM',
-      date: 'Today, 04 Aug',
-      services: ['Gel Nail Extensions', 'Classic Manicure'],
-      totalPrice: 2100,
-      status: 'Pending',
-      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
-    ),
-    BookingModel(
-      id: 'bk_4',
-      clientName: 'Emma Watson',
-      time: '02:30 PM',
-      date: 'Today, 04 Aug',
-      services: ['Bridal Makeup Consultation', 'Saree Draping'],
-      totalPrice: 4500,
-      notes: 'First time client.',
-      status: 'Pending',
-      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
-    ),
-    BookingModel(
-      id: 'bk_5',
-      clientName: 'Meera Kapoor',
-      time: '03:45 PM',
-      date: 'Today, 04 Aug',
-      services: ['Deluxe Pedicure', 'Foot Reflexology'],
-      totalPrice: 1600,
-      status: 'Pending',
-      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
-    ),
-    BookingModel(
-      id: 'bk_6',
-      clientName: 'Rahul Verma',
-      time: '05:00 PM',
-      date: 'Today, 04 Aug',
-      services: ['Beard Grooming & Styling', 'Head Massage'],
-      totalPrice: 950,
-      status: 'Pending',
-      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
-    ),
-    BookingModel(
-      id: 'bk_7',
-      clientName: 'Jessica Alba',
-      time: '06:15 PM',
-      date: 'Today, 04 Aug',
-      services: ['Nail Art (Chrome)', 'Cuticle Care'],
-      totalPrice: 1400,
-      status: 'Pending',
-      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
-    ),
-    BookingModel(
-      id: 'bk_8',
-      clientName: 'Deepika P.',
-      time: '11:00 AM',
-      date: 'Tomorrow, 05 Aug',
-      services: ['Full Body Waxing (Rica)', 'Threading'],
-      totalPrice: 3200,
-      status: 'Pending',
-      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
-    ),
-    BookingModel(
-      id: 'bk_9',
-      clientName: 'Zoe Kravitz',
-      time: '01:30 PM',
-      date: 'Tomorrow, 05 Aug',
-      services: ['Fruit Facial', 'Bleach'],
-      totalPrice: 1750,
-      status: 'Pending',
-      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
-    ),
-    BookingModel(
-      id: 'bk_10',
-      clientName: 'Nina Dobrev',
-      time: '04:00 PM',
-      date: 'Tomorrow, 05 Aug',
-      services: ['Balayage Hair Color', 'Olaplex Treatment'],
-      totalPrice: 6800,
-      status: 'Pending',
-      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
-    ),
-  ];
-
   /// Refreshes pending queue by filtering active pending items and taking top 5
   void _refreshQueue() {
-    final pendingList =
-        _allPendingBookings.where((b) => b.status == 'Pending').toList();
+    final pendingList = _allPendingBookings
+        .where((b) => b.status.toLowerCase() == 'pending')
+        .toList();
 
     totalPendingCount.value = pendingList.length;
     // Top 5 pending bookings for the main booking page queue
@@ -161,58 +56,75 @@ class BookingsController extends GetxController {
   }
 
   /// Binds real-time Firestore stream for the main booking page queue.
-  /// Optimized: Filters `bookingStatus == 'Pending'` and limits to 5 items directly on server side.
   void _bindPendingQueueStream() {
-    isLoadingBookings.value = true;
+    if (pendingQueueBookings.isEmpty) {
+      isLoadingBookings.value = true;
+    }
 
-    // Listen to bookings collection for current salonId (server-side limited to 5 pending items)
+    // Listen to bookings collection for current salonId in real-time
     _firestore
         .collection('bookings')
         .where('salonId', isEqualTo: currentSalonId)
-        .where('bookingStatus', isEqualTo: 'Pending')
-        .limit(5)
         .snapshots()
         .listen(
-      (snapshot) {
-        isLoadingBookings.value = false;
-        if (snapshot.docs.isNotEmpty) {
-          final pendingDocs =
-              snapshot.docs.map((doc) => BookingModel.fromFirestore(doc)).toList();
-          _allPendingBookings.assignAll(pendingDocs);
-        } else {
-          // Fallback to sample queue if Firestore has no documents yet
-          if (_allPendingBookings.isEmpty) {
-            _allPendingBookings.assignAll(_sampleBookings.take(5).toList());
-          }
-        }
-        _refreshQueue();
-      },
-      onError: (error) {
-        isLoadingBookings.value = false;
-        if (_allPendingBookings.isEmpty) {
-          _allPendingBookings.assignAll(_sampleBookings.take(5).toList());
-        }
-        _refreshQueue();
-        debugPrint('Error listening to bookings stream: $error');
-      },
-    );
+          (snapshot) {
+            isLoadingBookings.value = false;
+            final docs = snapshot.docs
+                .map((doc) => BookingModel.fromFirestore(doc))
+                .toList();
+            _allPendingBookings.assignAll(docs);
+            _refreshQueue();
+          },
+          onError: (error) {
+            isLoadingBookings.value = false;
+            _refreshQueue();
+            debugPrint('Error listening to bookings stream: $error');
+          },
+        );
   }
+
+  /// Returns total count of all bookings for the current salon
+  int get allBookingsCount => _allPendingBookings.length;
 
   /// Returns total count of pending bookings
   int get pendingCount => totalPendingCount.value;
+
+  /// Manual refresh for pull-to-refresh
+  Future<void> fetchBookings({bool force = false}) async {
+    try {
+      final snapshot = await _firestore
+          .collection('bookings')
+          .where('salonId', isEqualTo: currentSalonId)
+          .get();
+
+      final docs = snapshot.docs
+          .map((doc) => BookingModel.fromFirestore(doc))
+          .toList();
+      _allPendingBookings.assignAll(docs);
+      _refreshQueue();
+    } catch (e) {
+      debugPrint('Error fetching bookings: $e');
+    }
+  }
 
   /// Returns main queue list (max 5 pending bookings)
   List<BookingModel> get recentPendingBookings => pendingQueueBookings;
 
   /// Builds a Firestore query for the "See All" page using FirestoreListView with 10-10 pagination
   Query<BookingModel> getFirestoreQuery() {
-    Query query =
-        _firestore.collection('bookings').where('salonId', isEqualTo: currentSalonId);
+    Query query = _firestore
+        .collection('bookings')
+        .where('salonId', isEqualTo: currentSalonId);
 
     final filter = selectedFilter.value;
     if (filter != 'All' &&
-        ['Pending', 'Accepted', 'Rescheduled', 'Completed', 'Cancelled']
-            .contains(filter)) {
+        [
+          'Pending',
+          'Accepted',
+          'Rescheduled',
+          'Completed',
+          'Cancelled',
+        ].contains(filter)) {
       query = query.where('bookingStatus', isEqualTo: filter);
     }
 
@@ -224,22 +136,56 @@ class BookingsController extends GetxController {
 
   /// Action: Update status in Firestore & Local State
   Future<void> updateBookingStatus(
-      BookingModel booking, String newStatus) async {
+    BookingModel booking,
+    String newStatus,
+  ) async {
     try {
       // 1. Update in local state for instant UI update & top 5 queue recalculation
       final index = _allPendingBookings.indexWhere((b) => b.id == booking.id);
       if (index != -1) {
-        _allPendingBookings[index] =
-            _allPendingBookings[index].copyWith(status: newStatus);
+        _allPendingBookings[index] = _allPendingBookings[index].copyWith(
+          status: newStatus,
+        );
         _refreshQueue();
       }
 
-      // 2. Update Firestore document if not mock item
+      // 2. Update Firestore document ONLY for this specific booking
       if (booking.id.isNotEmpty && !booking.id.startsWith('bk_')) {
+        // Update exact bookings document
         await _firestore.collection('bookings').doc(booking.id).update({
           'bookingStatus': newStatus,
           'status': newStatus,
         });
+
+        // 3. Update transactions collection ONLY when status is Completed or Cancelled
+        final String lowerStatus = newStatus.toLowerCase();
+        if (lowerStatus == 'completed' || lowerStatus == 'cancelled' || lowerStatus == 'canceled') {
+          final String targetPaymentStatus = lowerStatus == 'completed' ? 'completed' : 'canceled';
+
+          // Update strictly the 'paymentStatus' field in matching transaction document
+          final txnDoc = await _firestore.collection('transactions').doc(booking.id).get();
+          if (txnDoc.exists) {
+            await _firestore.collection('transactions').doc(booking.id).update({
+              'paymentStatus': targetPaymentStatus,
+            });
+          } else {
+            final txnQuery = await _firestore
+                .collection('transactions')
+                .where('bookingId', isEqualTo: booking.id)
+                .get();
+
+            for (var doc in txnQuery.docs) {
+              await _firestore.collection('transactions').doc(doc.id).update({
+                'paymentStatus': targetPaymentStatus,
+              });
+            }
+          }
+
+          // Trigger TransactionController refresh if active in memory
+          if (Get.isRegistered<TransactionController>()) {
+            Get.find<TransactionController>().fetchTransactions(force: true);
+          }
+        }
       }
     } catch (e) {
       Get.snackbar(
