@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,8 +12,7 @@ class ProfileView extends GetView<ProfileController> {
   @override
   Widget build(BuildContext context) {
     // Inject ProfileController
-    final ProfileController profileController = Get.put(ProfileController());
-    profileController.fetchSalonProfile();
+    Get.put(ProfileController());
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9F8),
@@ -35,10 +35,7 @@ class ProfileView extends GetView<ProfileController> {
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 20.0,
-            vertical: 16.0,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 450),
@@ -69,7 +66,7 @@ class _SalonHeaderCard extends GetView<ProfileController> {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 28.0),
+      padding: const EdgeInsets.all(20.0),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topCenter,
@@ -91,7 +88,7 @@ class _SalonHeaderCard extends GetView<ProfileController> {
           // Rectangular Avatar Logo Container
           Obx(
             () => Container(
-              width: 400,
+              width: double.infinity,
               height: 150,
               decoration: BoxDecoration(
                 color: const Color(0xFF041C16),
@@ -107,18 +104,11 @@ class _SalonHeaderCard extends GetView<ProfileController> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(14),
-                child: controller.shopImage.value.isNotEmpty
-                    ? Image.network(
-                        controller.shopImage.value,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const _DefaultRectangularLogo(),
-                      )
-                    : const _DefaultRectangularLogo(),
+                child: _buildShopImage(controller.shopImage.value),
               ),
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
 
           // Salon Title
           Obx(
@@ -128,50 +118,101 @@ class _SalonHeaderCard extends GetView<ProfileController> {
                   : (controller.isLoading.value ? 'Loading...' : 'My Salon'),
               textAlign: TextAlign.center,
               style: GoogleFonts.playfairDisplay(
-                fontSize: 26,
+                fontSize: 24,
                 fontWeight: FontWeight.bold,
                 color: const Color(0xFF041C16),
                 letterSpacing: -0.3,
               ),
             ),
           ),
-          const SizedBox(height: 8),
 
-          // Location & Address Row
+          // Owner Name
           Obx(
-            () => controller.address.value.isNotEmpty
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Padding(
-                        padding: EdgeInsets.only(top: 2.0),
-                        child: Icon(
-                          Icons.location_on_outlined,
-                          size: 16,
-                          color: Color(0xFF4B5563),
-                        ),
+            () => controller.ownerName.value.isNotEmpty
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Text(
+                      'Owner: ${controller.ownerName.value}',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF5C5346),
                       ),
-                      const SizedBox(width: 4),
-                      Flexible(
-                        child: Text(
-                          controller.address.value,
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFF4B5563),
-                            height: 1.3,
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   )
                 : const SizedBox.shrink(),
+          ),
+          const SizedBox(height: 10),
+
+          // Phone & Hours Row
+          Obx(
+            () => Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (controller.phone.value.isNotEmpty) ...[
+                  const Icon(
+                    Icons.phone_outlined,
+                    size: 14,
+                    color: Color(0xFF4B5563),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    controller.phone.value,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: const Color(0xFF4B5563),
+                    ),
+                  ),
+                ],
+                if (controller.phone.value.isNotEmpty &&
+                    (controller.openingHours.value.isNotEmpty ||
+                        controller.closingHours.value.isNotEmpty))
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8.0),
+                    child: Text(
+                      '•',
+                      style: TextStyle(color: Color(0xFF9CA3AF)),
+                    ),
+                  ),
+                if (controller.openingHours.value.isNotEmpty ||
+                    controller.closingHours.value.isNotEmpty) ...[
+                  const Icon(
+                    Icons.access_time,
+                    size: 14,
+                    color: Color(0xFF4B5563),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${controller.openingHours.value} - ${controller.closingHours.value}',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: const Color(0xFF4B5563),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildShopImage(String path) {
+    if (path.isEmpty) return const _DefaultRectangularLogo();
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return Image.network(
+        path,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) =>
+            const _DefaultRectangularLogo(),
+      );
+    }
+    final file = File(path);
+    if (file.existsSync()) {
+      return Image.file(file, fit: BoxFit.cover);
+    }
+    return const _DefaultRectangularLogo();
   }
 }
 

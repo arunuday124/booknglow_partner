@@ -1,231 +1,274 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../model/booking_model.dart';
-
 import '../view/all_bookings.dart';
 
-/// GetX Controller managing bookings state and actions
+/// GetX Controller managing bookings state and actions with real-time Firestore integration
 class BookingsController extends GetxController {
-  // Reactive list of bookings
-  final RxList<BookingModel> bookingsList = <BookingModel>[].obs;
+  // Reactive list of bookings for main queue view (max 5 pending bookings)
+  final RxList<BookingModel> pendingQueueBookings = <BookingModel>[].obs;
 
-  // Selected filter option ('All', 'Pending', 'Today', 'Tomorrow')
+  // Total pending bookings count badge
+  final RxInt totalPendingCount = 0.obs;
+
+  // Loading state for main page stream
+  final RxBool isLoadingBookings = true.obs;
+
+  // Selected filter option ('All', 'Pending', 'Accepted', 'Rescheduled', 'Completed', 'Cancelled')
   final RxString selectedFilter = 'All'.obs;
+
+  // Firestore & Auth instances
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  /// Returns current authenticated salon ID, falling back to default salonId if user is unauthenticated
+  String get currentSalonId {
+    final user = _auth.currentUser;
+    if (user != null && user.uid.isNotEmpty) {
+      return user.uid;
+    }
+    return 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2';
+  }
 
   @override
   void onInit() {
     super.onInit();
-    loadInitialBookings();
+    _bindPendingQueueStream();
   }
 
-  /// Loads initial booking requests matching the design requirement
-  void loadInitialBookings() {
-    bookingsList.assignAll([
-      BookingModel(
-        id: 'bk_001',
-        clientName: 'Arunuday Debnath',
-        avatarUrl:
-            'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-        initials: 'AD',
-        time: '11:00 AM',
-        date: '04 Aug 2026',
-        services: ['Hair Cut', 'Hair Spa', 'Head Massage'],
-        totalPrice: 1499.0,
-        status: 'Pending',
-        isNew: true,
-      ),
-      BookingModel(
-        id: 'bk_002',
-        clientName: 'Sarah Jenkins',
-        avatarUrl: null,
-        initials: 'SJ',
-        time: '2:30 PM',
-        date: '05 Aug 2026',
-        services: ['Balayage Color', 'Hair Styling', 'Deep Conditioning'],
-        totalPrice: 3500.0,
-        status: 'Pending',
-        isNew: true,
-      ),
-      BookingModel(
-        id: 'bk_003',
-        clientName: 'Priya Sharma',
-        avatarUrl: null,
-        initials: 'PS',
-        time: '3:15 PM',
-        date: '04 Aug 2026',
-        services: ['Keratin Treatment', 'Hair Trim'],
-        totalPrice: 2800.0,
-        status: 'Pending',
-        isNew: true,
-      ),
-      BookingModel(
-        id: 'bk_004',
-        clientName: 'Michael Brown',
-        avatarUrl: null,
-        initials: 'MB',
-        time: '4:00 PM',
-        date: '04 Aug 2026',
-        services: ['Beard Trim', 'Gentlemen Beard Styling'],
-        totalPrice: 650.0,
-        status: 'Pending',
-        isNew: true,
-      ),
-      BookingModel(
-        id: 'bk_005',
-        clientName: 'Ananya Verma',
-        avatarUrl: null,
-        initials: 'AV',
-        time: '10:00 AM',
-        date: '05 Aug 2026',
-        services: ['Facial Glow', 'Threading'],
-        totalPrice: 999.0,
-        status: 'Pending',
-        isNew: true,
-      ),
-      BookingModel(
-        id: 'bk_006',
-        clientName: 'David Miller',
-        avatarUrl: null,
-        initials: 'DM',
-        time: '11:30 AM',
-        date: '05 Aug 2026',
-        services: ['Hair Cut', 'Scalp Treatment'],
-        totalPrice: 1200.0,
-        status: 'Pending',
-        isNew: true,
-      ),
-      BookingModel(
-        id: 'bk_007',
-        clientName: 'Rohan Gupta',
-        avatarUrl: null,
-        initials: 'RG',
-        time: '1:00 PM',
-        date: '05 Aug 2026',
-        services: ['Classic Haircut', 'Hair Color Touchup'],
-        totalPrice: 1800.0,
-        status: 'Pending',
-        isNew: true,
-      ),
-      BookingModel(
-        id: 'bk_008',
-        clientName: 'Emma Watson',
-        avatarUrl: null,
-        initials: 'EW',
-        time: '3:00 PM',
-        date: '05 Aug 2026',
-        services: ['Pedicure Spa', 'Manicure Care'],
-        totalPrice: 1600.0,
-        status: 'Pending',
-        isNew: true,
-      ),
-      BookingModel(
-        id: 'bk_009',
-        clientName: 'Vikram Mehta',
-        avatarUrl: null,
-        initials: 'VM',
-        time: '4:30 PM',
-        date: '05 Aug 2026',
-        services: ['Haircut', 'Head Massage'],
-        totalPrice: 850.0,
-        status: 'Pending',
-        isNew: true,
-      ),
-      BookingModel(
-        id: 'bk_010',
-        clientName: 'Kavita Patel',
-        avatarUrl: null,
-        initials: 'KP',
-        time: '5:15 PM',
-        date: '05 Aug 2026',
-        services: ['Hydra Facial', 'Eyebrow Shaping'],
-        totalPrice: 2200.0,
-        status: 'Pending',
-        isNew: true,
-      ),
-      BookingModel(
-        id: 'bk_011',
-        clientName: 'Alexander White',
-        avatarUrl: null,
-        initials: 'AW',
-        time: '6:00 PM',
-        date: '05 Aug 2026',
-        services: ['Hair Coloring', 'Hair Wash'],
-        totalPrice: 1950.0,
-        status: 'Pending',
-        isNew: true,
-      ),
-      BookingModel(
-        id: 'bk_012',
-        clientName: 'Sanya Malhotra',
-        avatarUrl: null,
-        initials: 'SM',
-        time: '6:45 PM',
-        date: '05 Aug 2026',
-        services: ['Bridal Makeup Consultation'],
-        totalPrice: 5000.0,
-        status: 'Pending',
-        isNew: true,
-      ),
-    ]);
+  // All pending bookings cache for dynamic queue management
+  final RxList<BookingModel> _allPendingBookings = <BookingModel>[].obs;
+
+  // Initial sample bookings list to ensure queue functionality works out-of-the-box
+  final List<BookingModel> _sampleBookings = [
+    BookingModel(
+      id: 'bk_1',
+      clientName: 'Sarah Jenkins',
+      time: '10:30 AM',
+      date: 'Today, 04 Aug',
+      services: ['Signature HydraFacial', 'Eyebrow Threading'],
+      totalPrice: 2499,
+      notes: 'Please ensure sensitive skin products are used.',
+      status: 'Pending',
+      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
+    ),
+    BookingModel(
+      id: 'bk_2',
+      clientName: 'Priya Sharma',
+      time: '11:45 AM',
+      date: 'Today, 04 Aug',
+      services: ['L\'Oreal Hair Spa', 'Hair Cut & Blowdry'],
+      totalPrice: 1850,
+      notes: 'Prefers senior stylist if available.',
+      status: 'Pending',
+      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
+    ),
+    BookingModel(
+      id: 'bk_3',
+      clientName: 'Anita Roy',
+      time: '01:15 PM',
+      date: 'Today, 04 Aug',
+      services: ['Gel Nail Extensions', 'Classic Manicure'],
+      totalPrice: 2100,
+      status: 'Pending',
+      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
+    ),
+    BookingModel(
+      id: 'bk_4',
+      clientName: 'Emma Watson',
+      time: '02:30 PM',
+      date: 'Today, 04 Aug',
+      services: ['Bridal Makeup Consultation', 'Saree Draping'],
+      totalPrice: 4500,
+      notes: 'First time client.',
+      status: 'Pending',
+      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
+    ),
+    BookingModel(
+      id: 'bk_5',
+      clientName: 'Meera Kapoor',
+      time: '03:45 PM',
+      date: 'Today, 04 Aug',
+      services: ['Deluxe Pedicure', 'Foot Reflexology'],
+      totalPrice: 1600,
+      status: 'Pending',
+      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
+    ),
+    BookingModel(
+      id: 'bk_6',
+      clientName: 'Rahul Verma',
+      time: '05:00 PM',
+      date: 'Today, 04 Aug',
+      services: ['Beard Grooming & Styling', 'Head Massage'],
+      totalPrice: 950,
+      status: 'Pending',
+      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
+    ),
+    BookingModel(
+      id: 'bk_7',
+      clientName: 'Jessica Alba',
+      time: '06:15 PM',
+      date: 'Today, 04 Aug',
+      services: ['Nail Art (Chrome)', 'Cuticle Care'],
+      totalPrice: 1400,
+      status: 'Pending',
+      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
+    ),
+    BookingModel(
+      id: 'bk_8',
+      clientName: 'Deepika P.',
+      time: '11:00 AM',
+      date: 'Tomorrow, 05 Aug',
+      services: ['Full Body Waxing (Rica)', 'Threading'],
+      totalPrice: 3200,
+      status: 'Pending',
+      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
+    ),
+    BookingModel(
+      id: 'bk_9',
+      clientName: 'Zoe Kravitz',
+      time: '01:30 PM',
+      date: 'Tomorrow, 05 Aug',
+      services: ['Fruit Facial', 'Bleach'],
+      totalPrice: 1750,
+      status: 'Pending',
+      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
+    ),
+    BookingModel(
+      id: 'bk_10',
+      clientName: 'Nina Dobrev',
+      time: '04:00 PM',
+      date: 'Tomorrow, 05 Aug',
+      services: ['Balayage Hair Color', 'Olaplex Treatment'],
+      totalPrice: 6800,
+      status: 'Pending',
+      salonId: 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2',
+    ),
+  ];
+
+  /// Refreshes pending queue by filtering active pending items and taking top 5
+  void _refreshQueue() {
+    final pendingList =
+        _allPendingBookings.where((b) => b.status == 'Pending').toList();
+
+    totalPendingCount.value = pendingList.length;
+    // Top 5 pending bookings for the main booking page queue
+    pendingQueueBookings.assignAll(pendingList.take(5).toList());
   }
 
-  /// Getter for pending requests count badge
-  int get pendingCount =>
-      bookingsList.where((b) => b.status == 'Pending').length;
+  /// Binds real-time Firestore stream for the main booking page queue.
+  /// Optimized: Filters `bookingStatus == 'Pending'` and limits to 5 items directly on server side.
+  void _bindPendingQueueStream() {
+    isLoadingBookings.value = true;
 
-  /// Main page list: capped at 10 new pending bookings
-  List<BookingModel> get recentPendingBookings {
-    return bookingsList.where((b) => b.status == 'Pending').take(10).toList();
+    // Listen to bookings collection for current salonId (server-side limited to 5 pending items)
+    _firestore
+        .collection('bookings')
+        .where('salonId', isEqualTo: currentSalonId)
+        .where('bookingStatus', isEqualTo: 'Pending')
+        .limit(5)
+        .snapshots()
+        .listen(
+      (snapshot) {
+        isLoadingBookings.value = false;
+        if (snapshot.docs.isNotEmpty) {
+          final pendingDocs =
+              snapshot.docs.map((doc) => BookingModel.fromFirestore(doc)).toList();
+          _allPendingBookings.assignAll(pendingDocs);
+        } else {
+          // Fallback to sample queue if Firestore has no documents yet
+          if (_allPendingBookings.isEmpty) {
+            _allPendingBookings.assignAll(_sampleBookings.take(5).toList());
+          }
+        }
+        _refreshQueue();
+      },
+      onError: (error) {
+        isLoadingBookings.value = false;
+        if (_allPendingBookings.isEmpty) {
+          _allPendingBookings.assignAll(_sampleBookings.take(5).toList());
+        }
+        _refreshQueue();
+        debugPrint('Error listening to bookings stream: $error');
+      },
+    );
   }
 
-  /// Filtered list based on selected filter (for See All page)
-  List<BookingModel> get filteredBookings {
+  /// Returns total count of pending bookings
+  int get pendingCount => totalPendingCount.value;
+
+  /// Returns main queue list (max 5 pending bookings)
+  List<BookingModel> get recentPendingBookings => pendingQueueBookings;
+
+  /// Builds a Firestore query for the "See All" page using FirestoreListView with 10-10 pagination
+  Query<BookingModel> getFirestoreQuery() {
+    Query query =
+        _firestore.collection('bookings').where('salonId', isEqualTo: currentSalonId);
+
     final filter = selectedFilter.value;
-    if (filter == 'Pending' ||
-        filter == 'Accepted' ||
-        filter == 'Rescheduled' ||
-        filter == 'Completed' ||
-        filter == 'Cancelled') {
-      return bookingsList.where((b) => b.status == filter).toList();
-    } else if (filter == 'Today') {
-      return bookingsList
-          .where((b) => b.date.contains('04 Aug') || b.date == 'Today')
-          .toList();
-    } else if (filter == 'Tomorrow') {
-      return bookingsList
-          .where((b) => b.date.contains('05 Aug') || b.date == 'Tomorrow')
-          .toList();
+    if (filter != 'All' &&
+        ['Pending', 'Accepted', 'Rescheduled', 'Completed', 'Cancelled']
+            .contains(filter)) {
+      query = query.where('bookingStatus', isEqualTo: filter);
     }
-    return bookingsList;
+
+    return query.withConverter<BookingModel>(
+      fromFirestore: (snapshot, _) => BookingModel.fromFirestore(snapshot),
+      toFirestore: (booking, _) => {},
+    );
   }
 
-  /// Action: Navigate to See All Page
-  void navigateToAllBookings() {
-    Get.to(() => const AllBookingsView());
-  }
+  /// Action: Update status in Firestore & Local State
+  Future<void> updateBookingStatus(
+      BookingModel booking, String newStatus) async {
+    try {
+      // 1. Update in local state for instant UI update & top 5 queue recalculation
+      final index = _allPendingBookings.indexWhere((b) => b.id == booking.id);
+      if (index != -1) {
+        _allPendingBookings[index] =
+            _allPendingBookings[index].copyWith(status: newStatus);
+        _refreshQueue();
+      }
 
-  /// Action: Accept Booking
-  void acceptBooking(BookingModel booking) {
-    final index = bookingsList.indexWhere((b) => b.id == booking.id);
-    if (index != -1) {
-      bookingsList[index] = booking.copyWith(status: 'Accepted', isNew: false);
+      // 2. Update Firestore document if not mock item
+      if (booking.id.isNotEmpty && !booking.id.startsWith('bk_')) {
+        await _firestore.collection('bookings').doc(booking.id).update({
+          'bookingStatus': newStatus,
+          'status': newStatus,
+        });
+      }
+    } catch (e) {
       Get.snackbar(
-        'Booking Accepted',
-        'Appointment for ${booking.clientName} has been confirmed.',
+        'Error',
+        'Failed to update booking status: $e',
         snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF041C16),
+        backgroundColor: Colors.red.shade700,
         colorText: Colors.white,
-        margin: const EdgeInsets.all(16),
-        borderRadius: 12,
-        duration: const Duration(seconds: 3),
-        icon: const Icon(Icons.check_circle_outline, color: Colors.white),
       );
     }
   }
 
-  /// Confirmation Popup before Completing Booking ("Is the service and payment completed?")
+  /// Action: Accept Booking
+  Future<void> acceptBooking(BookingModel booking) async {
+    await updateBookingStatus(booking, 'Accepted');
+    Get.snackbar(
+      'Booking Accepted',
+      'Appointment for ${booking.clientName} has been confirmed.',
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: const Color(0xFF041C16),
+      colorText: Colors.white,
+      margin: const EdgeInsets.all(16),
+      borderRadius: 12,
+      duration: const Duration(seconds: 3),
+      icon: const Icon(Icons.check_circle_outline, color: Colors.white),
+    );
+  }
+
+  /// Confirmation Popup before Completing Booking
   void confirmCompleteBooking(BookingModel booking) {
     Get.dialog(
       Dialog(
@@ -327,7 +370,7 @@ class BookingsController extends GetxController {
     );
   }
 
-  /// Confirmation Popup before Cancelling Booking ("Do you really want to cancel?")
+  /// Confirmation Popup before Cancelling Booking
   void confirmCancelBooking(BookingModel booking) {
     Get.dialog(
       Dialog(
@@ -430,41 +473,35 @@ class BookingsController extends GetxController {
   }
 
   /// Action: Complete Booking
-  void completeBooking(BookingModel booking) {
-    final index = bookingsList.indexWhere((b) => b.id == booking.id);
-    if (index != -1) {
-      bookingsList[index] = booking.copyWith(status: 'Completed', isNew: false);
-      Get.snackbar(
-        'Booking Completed',
-        'Appointment for ${booking.clientName} has been marked as completed.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFF166534),
-        colorText: Colors.white,
-        margin: const EdgeInsets.all(16),
-        borderRadius: 12,
-        duration: const Duration(seconds: 3),
-        icon: const Icon(Icons.task_alt_rounded, color: Colors.white),
-      );
-    }
+  Future<void> completeBooking(BookingModel booking) async {
+    await updateBookingStatus(booking, 'Completed');
+    Get.snackbar(
+      'Booking Completed',
+      'Appointment for ${booking.clientName} has been marked as completed.',
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: const Color(0xFF166534),
+      colorText: Colors.white,
+      margin: const EdgeInsets.all(16),
+      borderRadius: 12,
+      duration: const Duration(seconds: 3),
+      icon: const Icon(Icons.task_alt_rounded, color: Colors.white),
+    );
   }
 
   /// Action: Cancel Booking
-  void cancelBooking(BookingModel booking) {
-    final index = bookingsList.indexWhere((b) => b.id == booking.id);
-    if (index != -1) {
-      bookingsList[index] = booking.copyWith(status: 'Cancelled', isNew: false);
-      Get.snackbar(
-        'Booking Cancelled',
-        'Appointment for ${booking.clientName} has been cancelled.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFFDC2626),
-        colorText: Colors.white,
-        margin: const EdgeInsets.all(16),
-        borderRadius: 12,
-        duration: const Duration(seconds: 3),
-        icon: const Icon(Icons.cancel_outlined, color: Colors.white),
-      );
-    }
+  Future<void> cancelBooking(BookingModel booking) async {
+    await updateBookingStatus(booking, 'Cancelled');
+    Get.snackbar(
+      'Booking Cancelled',
+      'Appointment for ${booking.clientName} has been cancelled.',
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: const Color(0xFFDC2626),
+      colorText: Colors.white,
+      margin: const EdgeInsets.all(16),
+      borderRadius: 12,
+      duration: const Duration(seconds: 3),
+      icon: const Icon(Icons.cancel_outlined, color: Colors.white),
+    );
   }
 
   /// Action: Reschedule Booking
@@ -493,7 +530,7 @@ class BookingsController extends GetxController {
             const SizedBox(height: 16),
             Text(
               'Reschedule Request',
-              style: TextStyle(
+              style: GoogleFonts.inter(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
                 color: const Color(0xFF041C16),
@@ -502,7 +539,10 @@ class BookingsController extends GetxController {
             const SizedBox(height: 8),
             Text(
               'Propose a new time for ${booking.clientName} (${booking.serviceName})',
-              style: TextStyle(fontSize: 14, color: const Color(0xFF6B7280)),
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: const Color(0xFF6B7280),
+              ),
             ),
             const SizedBox(height: 20),
             Row(
@@ -574,15 +614,19 @@ class BookingsController extends GetxController {
     );
   }
 
-  void _updateBookingTime(BookingModel booking, String time, String date) {
-    final index = bookingsList.indexWhere((b) => b.id == booking.id);
-    if (index != -1) {
-      bookingsList[index] = booking.copyWith(
-        time: time,
-        date: date,
-        status: 'Rescheduled',
-        isNew: false,
-      );
+  Future<void> _updateBookingTime(
+    BookingModel booking,
+    String time,
+    String date,
+  ) async {
+    try {
+      if (booking.id.isNotEmpty && !booking.id.startsWith('bk_')) {
+        await _firestore.collection('bookings').doc(booking.id).update({
+          'bookingStatus': 'Rescheduled',
+          'time': time,
+          'date': date,
+        });
+      }
       Get.snackbar(
         'Booking Rescheduled',
         'Proposed new time ($time, $date) for ${booking.clientName}.',
@@ -594,23 +638,20 @@ class BookingsController extends GetxController {
         duration: const Duration(seconds: 3),
         icon: const Icon(Icons.edit_calendar_outlined, color: Colors.white),
       );
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to reschedule booking in Firestore: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.shade700,
+        colorText: Colors.white,
+      );
     }
   }
 
-  /// Action: See All Bookings
-  void onSeeAllPressed() {
-    selectedFilter.value = 'All';
-    Get.snackbar(
-      'All Bookings',
-      'Displaying all booking requests',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: const Color(0xFF041C16),
-      colorText: Colors.white,
-      margin: const EdgeInsets.all(16),
-      borderRadius: 12,
-      duration: const Duration(seconds: 2),
-      icon: const Icon(Icons.list_alt_rounded, color: Colors.white),
-    );
+  /// Action: Navigate to See All Page
+  void navigateToAllBookings() {
+    Get.to(() => const AllBookingsView());
   }
 
   /// Action: Show Filter Dialog

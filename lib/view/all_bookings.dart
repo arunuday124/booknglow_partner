@@ -1,3 +1,4 @@
+import 'package:firebase_ui_firestore/firebase_ui_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,7 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../controller/bookings_controller.dart';
 import '../model/booking_model.dart';
 
-/// Dedicated "See All" Bookings View built with StatelessWidget & GetX
+/// Dedicated "See All" Bookings View built with FirestoreListView (10-10 pagination) & GetX
 class AllBookingsView extends GetView<BookingsController> {
   const AllBookingsView({super.key});
 
@@ -21,8 +22,11 @@ class AllBookingsView extends GetView<BookingsController> {
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: Color(0xFF041C16), size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Color(0xFF041C16),
+            size: 20,
+          ),
           onPressed: () => Get.back(),
         ),
         title: Text(
@@ -43,11 +47,7 @@ class AllBookingsView extends GetView<BookingsController> {
         ],
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1.0),
-          child: Divider(
-            height: 1.0,
-            thickness: 1.0,
-            color: Color(0xFFF0F0F0),
-          ),
+          child: Divider(height: 1.0, thickness: 1.0, color: Color(0xFFF0F0F0)),
         ),
       ),
       body: SafeArea(
@@ -55,19 +55,131 @@ class AllBookingsView extends GetView<BookingsController> {
           children: [
             const _FilterChipsSection(),
             Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20.0,
-                  vertical: 16.0,
-                ),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 480),
-                    child: const _AllBookingsListSection(),
+              child: Obx(() {
+                final query = controller.getFirestoreQuery();
+                return FirestoreListView<BookingModel>(
+                  key: ValueKey(controller.selectedFilter.value),
+                  query: query,
+                  pageSize: 10, // Paginate 10 by 10 instances from Firestore
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 16.0,
                   ),
-                ),
-              ),
+                  physics: const BouncingScrollPhysics(),
+                  itemBuilder: (context, doc) {
+                    final booking = doc.data();
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 20.0),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 480),
+                          child: _AllBookingCardItem(booking: booking),
+                        ),
+                      ),
+                    );
+                  },
+                  emptyBuilder: (context) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32.0),
+                        child: Container(
+                          width: double.infinity,
+                          constraints: const BoxConstraints(maxWidth: 480),
+                          padding: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFF3F4F6)),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.event_available_outlined,
+                                size: 48,
+                                color: Color(0xFF9CA3AF),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'No bookings found',
+                                style: GoogleFonts.inter(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF374151),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'There are no bookings matching the selected filter.',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  color: const Color(0xFF6B7280),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  loadingBuilder: (context) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(32.0),
+                        child: CircularProgressIndicator(
+                          color: Color(0xFF041C16),
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32.0),
+                        child: Container(
+                          width: double.infinity,
+                          constraints: const BoxConstraints(maxWidth: 480),
+                          padding: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFF3F4F6)),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.error_outline_rounded,
+                                size: 48,
+                                color: Color(0xFFEF4444),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Error loading bookings',
+                                style: GoogleFonts.inter(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF374151),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '$error',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: const Color(0xFF6B7280),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              }),
             ),
           ],
         ),
@@ -88,7 +200,7 @@ class _FilterChipsSection extends GetView<BookingsController> {
       'Accepted',
       'Rescheduled',
       'Completed',
-      'Cancelled'
+      'Cancelled',
     ];
 
     return Container(
@@ -139,68 +251,6 @@ class _FilterChipsSection extends GetView<BookingsController> {
   }
 }
 
-/// List Section displaying all filtered bookings
-class _AllBookingsListSection extends GetView<BookingsController> {
-  const _AllBookingsListSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return Obx(() {
-      final list = controller.filteredBookings;
-
-      if (list.isEmpty) {
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(32),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFF3F4F6)),
-          ),
-          child: Column(
-            children: [
-              const Icon(
-                Icons.event_available_outlined,
-                size: 48,
-                color: Color(0xFF9CA3AF),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'No bookings found',
-                style: GoogleFonts.inter(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF374151),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'There are no bookings matching the selected filter.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: const Color(0xFF6B7280),
-                ),
-              ),
-            ],
-          ),
-        );
-      }
-
-      return ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: list.length,
-        separatorBuilder: (context, index) => const SizedBox(height: 20),
-        itemBuilder: (context, index) {
-          final booking = list[index];
-          return _AllBookingCardItem(booking: booking);
-        },
-      );
-    });
-  }
-}
-
 /// Individual Booking Card for All Bookings Page
 class _AllBookingCardItem extends GetView<BookingsController> {
   final BookingModel booking;
@@ -233,8 +283,8 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                 color: booking.status == 'Accepted'
                     ? const Color(0xFF22C55E)
                     : (booking.status == 'Rescheduled'
-                        ? const Color(0xFFF59E0B)
-                        : const Color(0xFFF5E4D7)),
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFFF5E4D7)),
               ),
               Expanded(
                 child: Padding(
@@ -385,8 +435,9 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                                   backgroundColor: const Color(0xFF166534),
                                   foregroundColor: Colors.white,
                                   elevation: 0,
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 14),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(24),
                                   ),
@@ -414,8 +465,9 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                                     color: Color(0xFFDC2626),
                                     width: 1.2,
                                   ),
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 14),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(24),
                                   ),
@@ -487,8 +539,9 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                                   backgroundColor: const Color(0xFF041C16),
                                   foregroundColor: Colors.white,
                                   elevation: 0,
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 14),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(24),
                                   ),
@@ -516,8 +569,9 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                                     color: Color(0xFFD1D5DB),
                                     width: 1.2,
                                   ),
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 14),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(24),
                                   ),

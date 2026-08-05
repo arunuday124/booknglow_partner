@@ -157,8 +157,9 @@ class RegistrationController extends GetxController {
     }
 
     // 3. Validate Phone Number
-    if (phoneController.text.trim().isEmpty) {
-      _showValidationError('Please enter a valid Contact Phone Number.');
+    final String rawPhone = phoneController.text.replaceAll(RegExp(r'\D'), '');
+    if (rawPhone.length != 10) {
+      _showValidationError('Please enter a valid 10-digit contact phone number.');
       return;
     }
 

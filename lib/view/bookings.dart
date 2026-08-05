@@ -154,13 +154,22 @@ class _PendingRequestsHeaderSection extends GetView<BookingsController> {
   }
 }
 
-/// Reactive List of Booking Cards (Main Page: Max 10 items)
+/// Reactive List of Booking Cards (Main Page: Queue of Max 5 Pending items)
 class _BookingCardsListSection extends GetView<BookingsController> {
   const _BookingCardsListSection();
 
   @override
   Widget build(BuildContext context) {
     return Obx(() {
+      if (controller.isLoadingBookings.value) {
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(32.0),
+            child: CircularProgressIndicator(color: Color(0xFF041C16)),
+          ),
+        );
+      }
+
       final list = controller.recentPendingBookings;
       if (list.isEmpty) {
         return Container(
@@ -180,7 +189,7 @@ class _BookingCardsListSection extends GetView<BookingsController> {
               ),
               const SizedBox(height: 12),
               Text(
-                'No requests found',
+                'No pending requests found',
                 style: GoogleFonts.inter(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
@@ -203,21 +212,28 @@ class _BookingCardsListSection extends GetView<BookingsController> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // "2 New" badge text over the top of the card list
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF5E4D7), // Warm peach background
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '${controller.pendingCount} New',
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF5C4E3D),
+          // Queue status & count badge
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5E4D7), // Warm peach background
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${controller.pendingCount} New',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF5C4E3D),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
           const SizedBox(height: 14),
           ListView.separated(

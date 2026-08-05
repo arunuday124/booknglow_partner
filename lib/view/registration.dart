@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -152,11 +153,15 @@ class _RegistrationCardForm extends GetView<RegistrationController> {
           // Phone Number Field (Required)
           _CustomInputField(
             label: 'Contact Phone Number',
-            hintText: '+91 98765 43210',
+            hintText: 'Enter 10-digit phone number',
             controller: controller.phoneController,
             keyboardType: TextInputType.phone,
             icon: Icons.phone_outlined,
             isRequired: true,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(10),
+            ],
           ),
           const SizedBox(height: 18),
 
@@ -604,6 +609,7 @@ class _CustomInputField extends StatelessWidget {
   final IconData icon;
   final int maxLines;
   final bool isRequired;
+  final List<TextInputFormatter>? inputFormatters;
 
   const _CustomInputField({
     required this.label,
@@ -613,6 +619,7 @@ class _CustomInputField extends StatelessWidget {
     required this.icon,
     this.maxLines = 1,
     this.isRequired = false,
+    this.inputFormatters,
   });
 
   @override
@@ -646,6 +653,7 @@ class _CustomInputField extends StatelessWidget {
           controller: controller,
           keyboardType: keyboardType,
           maxLines: maxLines,
+          inputFormatters: inputFormatters,
           style: GoogleFonts.inter(
             fontSize: 14,
             color: const Color(0xFF1F2937),
