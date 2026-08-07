@@ -66,20 +66,27 @@ class _DashboardHomeTab extends StatelessWidget {
           onRefresh: () async {
             // Trigger refresh for controllers when user scrolls down (pull-to-refresh)
             if (Get.isRegistered<DashboardController>()) {
-              await Get.find<DashboardController>().fetchDashboardMetrics(force: true);
+              await Get.find<DashboardController>().fetchDashboardMetrics(
+                force: true,
+              );
             }
             if (Get.isRegistered<BookingsController>()) {
               await Get.find<BookingsController>().fetchBookings(force: true);
             }
             if (Get.isRegistered<TransactionController>()) {
-              await Get.find<TransactionController>().fetchTransactions(force: true);
+              await Get.find<TransactionController>().fetchTransactions(
+                force: true,
+              );
             }
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(
               parent: BouncingScrollPhysics(),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 16.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: const [
@@ -165,6 +172,7 @@ class _MetricsRowSection extends GetView<DashboardController> {
               icon: Icons.north_east_rounded,
               value: displayRevenue,
               subText: controller.revenueGrowth.value,
+              subTextColor: const Color(0xFF16A34A),
             );
           }),
         ),
@@ -184,6 +192,12 @@ class _MetricsRowSection extends GetView<DashboardController> {
               icon: Icons.calendar_today_outlined,
               value: '$total',
               subText: '$pending Pending',
+              subTextColor: const Color.fromARGB(
+                255,
+                217,
+                13,
+                6,
+              ), // Amber / Warm Orange alert color
             );
           }),
         ),
@@ -196,6 +210,9 @@ class _MetricsRowSection extends GetView<DashboardController> {
               icon: Icons.star_border_rounded,
               value: controller.reviewsRating.value,
               subText: '${controller.totalReviews.value} Ratings',
+              subTextColor: const Color(
+                0xFF2563EB,
+              ), // Vibrant Blue accent color
             ),
           ),
         ),
@@ -210,12 +227,14 @@ class _MetricCard extends StatelessWidget {
   final IconData icon;
   final String value;
   final String subText;
+  final Color? subTextColor;
 
   const _MetricCard({
     required this.title,
     required this.icon,
     required this.value,
     required this.subText,
+    this.subTextColor,
   });
 
   @override
@@ -274,8 +293,8 @@ class _MetricCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: GoogleFonts.inter(
               fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: const Color(0xFF5C5346),
+              fontWeight: FontWeight.w600,
+              color: subTextColor ?? const Color(0xFF5C5346),
             ),
           ),
         ],
@@ -285,11 +304,16 @@ class _MetricCard extends StatelessWidget {
 }
 
 /// "Next Up" Appointment Card Section
-class _NextUpSection extends GetView<DashboardController> {
+class _NextUpSection extends StatelessWidget {
   const _NextUpSection();
 
   @override
   Widget build(BuildContext context) {
+    if (!Get.isRegistered<BookingsController>()) {
+      Get.put(BookingsController());
+    }
+    final bookingsCtrl = Get.find<BookingsController>();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -312,63 +336,103 @@ class _NextUpSection extends GetView<DashboardController> {
           ],
         ),
         const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16.0),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0A2B23),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x1A0A2B23),
-                blurRadius: 14,
-                offset: Offset(0, 6),
+        Obx(() {
+          final bookings = bookingsCtrl.upcomingBookings;
+          if (bookings.isEmpty) {
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20.0,
+                vertical: 24.0,
               ),
-            ],
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Client Avatar
-              ClipOval(
-                child: Image.asset(
-                  'assets/images/ananya_avatar.png',
+              decoration: BoxDecoration(
+                color: const Color(0xFF0A2B23),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.event_outlined,
+                    color: Color(0xFFB0C4BE),
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'No upcoming appointments scheduled',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: const Color(0xFFB0C4BE),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final nextItem = bookings.first;
+          final clientName = nextItem.clientName;
+          final service = nextItem.serviceName.isNotEmpty
+              ? nextItem.serviceName
+              : 'Salon Service';
+          final time = nextItem.time.isNotEmpty
+              ? nextItem.time
+              : (nextItem.date.isNotEmpty ? nextItem.date : 'Today');
+
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16.0),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0A2B23),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x1A0A2B23),
+                  blurRadius: 14,
+                  offset: Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Client Avatar / Initials
+                Container(
                   width: 54,
                   height: 54,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    width: 54,
-                    height: 54,
-                    color: const Color(0xFF1E463C),
-                    child: const Icon(
-                      Icons.person,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF1E463C),
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    nextItem.initials,
+                    style: GoogleFonts.inter(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                       color: Colors.white,
-                      size: 28,
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 14),
-              // Appointment Details Column
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Obx(
-                          () => Text(
-                            controller.nextClientName.value,
-                            style: GoogleFonts.playfairDisplay(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                const SizedBox(width: 14),
+                // Appointment Details Column
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              clientName,
+                              style: GoogleFonts.playfairDisplay(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
-                        ),
-                        Obx(
-                          () => Container(
+                          Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 10,
                               vertical: 4,
@@ -378,7 +442,7 @@ class _NextUpSection extends GetView<DashboardController> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              controller.nextTimeLeft.value,
+                              nextItem.status,
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -386,13 +450,11 @@ class _NextUpSection extends GetView<DashboardController> {
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Obx(
-                      () => Text(
-                        controller.nextService.value,
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        service,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(
@@ -401,57 +463,53 @@ class _NextUpSection extends GetView<DashboardController> {
                           color: const Color(0xFFB0C4BE),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.access_time,
-                          size: 14,
-                          color: Color(0xFFB0C4BE),
-                        ),
-                        const SizedBox(width: 4),
-                        Obx(
-                          () => Text(
-                            controller.nextTime.value,
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.access_time,
+                            size: 14,
+                            color: Color(0xFFB0C4BE),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            time,
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               color: Colors.white,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 14),
-                        const Icon(
-                          Icons.person_outline,
-                          size: 14,
-                          color: Color(0xFFB0C4BE),
-                        ),
-                        const SizedBox(width: 4),
-                        Obx(
-                          () => Text(
-                            controller.nextStaff.value,
+                          const SizedBox(width: 14),
+                          const Icon(
+                            Icons.payments_outlined,
+                            size: 14,
+                            color: Color(0xFFB0C4BE),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '₹${nextItem.totalPrice.toStringAsFixed(0)}',
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               color: Colors.white,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
+              ],
+            ),
+          );
+        }),
       ],
     );
   }
 }
 
-/// "Daily Logs" Activity List Section
+/// Today's Upcoming Bookings List Section
 class _DailyLogsSection extends GetView<DashboardController> {
   const _DailyLogsSection();
 
@@ -463,13 +521,13 @@ class _DailyLogsSection extends GetView<DashboardController> {
         Row(
           children: [
             const Icon(
-              Icons.article_outlined,
+              Icons.calendar_month_outlined,
               size: 18,
               color: Color(0xFF5C5346),
             ),
             const SizedBox(width: 6),
             Text(
-              'Daily Logs',
+              "Today's Upcoming Bookings",
               style: GoogleFonts.inter(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -494,18 +552,74 @@ class _DailyLogsSection extends GetView<DashboardController> {
           ),
           child: Column(
             children: [
-              Obx(
-                () => ListView.separated(
+              Obx(() {
+                if (!Get.isRegistered<BookingsController>()) {
+                  Get.put(BookingsController());
+                }
+                final bookingsCtrl = Get.find<BookingsController>();
+
+                if (bookingsCtrl.isLoadingBookings.value) {
+                  return const Padding(
+                    padding: EdgeInsets.all(32.0),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF041C16),
+                      ),
+                    ),
+                  );
+                }
+
+                final bookings = bookingsCtrl.todaysUpcomingBookings;
+
+                if (bookings.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.all(32.0),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.event_available_outlined,
+                            size: 40,
+                            color: Color(0xFF9CA3AF),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'No upcoming bookings found for today',
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: const Color(0xFF6B7280),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: controller.dailyLogs.length,
+                  itemCount: bookings.length,
                   separatorBuilder: (context, index) => const Divider(
                     height: 1,
                     thickness: 1,
                     color: Color(0xFFF3F4F6),
                   ),
                   itemBuilder: (context, index) {
-                    final item = controller.dailyLogs[index];
+                    final item = bookings[index];
+                    final serviceStr = item.serviceName.isNotEmpty
+                        ? item.serviceName
+                        : 'Salon Service';
+                    final timeStr = item.time.isNotEmpty
+                        ? item.time
+                        : (item.date.isNotEmpty ? item.date : 'Scheduled');
+                    final statusStr = item.status;
+                    final isConfirmed =
+                        statusStr.toLowerCase() == 'confirmed' ||
+                        statusStr.toLowerCase() == 'accepted';
+
                     return Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16.0,
@@ -513,37 +627,108 @@ class _DailyLogsSection extends GetView<DashboardController> {
                       ),
                       child: Row(
                         children: [
-                          // Vertical Color Status Bar
+                          // Initials Avatar
                           Container(
-                            width: 3.5,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: item.indicatorColor,
-                              borderRadius: BorderRadius.circular(2),
+                            width: 42,
+                            height: 42,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF041C16),
+                              shape: BoxShape.circle,
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              item.initials,
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: const Color(0xFFEFE0D3),
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
-                          // Log Details
+                          // Details from Firebase
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  '${item.title} - ${item.service}',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: const Color(0xFF1F2937),
-                                  ),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        item.clientName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFF1F2937),
+                                        ),
+                                      ),
+                                    ),
+                                    Text(
+                                      '₹${item.totalPrice.toStringAsFixed(0)}',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF041C16),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  '${item.status} • ${item.time}',
+                                  serviceStr,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: GoogleFonts.inter(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w400,
                                     color: const Color(0xFF6B7280),
                                   ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.access_time,
+                                      size: 13,
+                                      color: Color(0xFF9CA3AF),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      timeStr,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: const Color(0xFF4B5563),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isConfirmed
+                                            ? const Color(0xFFDCFCE7)
+                                            : const Color(0xFFFEF3C7),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        statusStr,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: isConfirmed
+                                              ? const Color(0xFF15803D)
+                                              : const Color(0xFFB45309),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
@@ -552,12 +737,18 @@ class _DailyLogsSection extends GetView<DashboardController> {
                       ),
                     );
                   },
-                ),
-              ),
+                );
+              }),
               const Divider(height: 1, thickness: 1, color: Color(0xFFF3F4F6)),
-              // View All Activity Button
+              // View All Bookings Button
               InkWell(
-                onTap: controller.onViewAllActivity,
+                onTap: () {
+                  if (Get.isRegistered<BookingsController>()) {
+                    Get.find<BookingsController>().navigateToAllBookings();
+                  } else {
+                    controller.changeNavIndex(1);
+                  }
+                },
                 borderRadius: const BorderRadius.only(
                   bottomLeft: Radius.circular(16),
                   bottomRight: Radius.circular(16),
@@ -566,7 +757,7 @@ class _DailyLogsSection extends GetView<DashboardController> {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 14.0),
                   child: Text(
-                    'VIEW ALL ACTIVITY',
+                    'VIEW ALL BOOKINGS',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
                       fontSize: 13,

@@ -33,11 +33,7 @@ class ServicesView extends GetView<ServicesController> {
         centerTitle: false,
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1.0),
-          child: Divider(
-            height: 1.0,
-            thickness: 1.0,
-            color: Color(0xFFE5E7EB),
-          ),
+          child: Divider(height: 1.0, thickness: 1.0, color: Color(0xFFE5E7EB)),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
@@ -50,10 +46,7 @@ class ServicesView extends GetView<ServicesController> {
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 20.0,
-            vertical: 24.0,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 450),
@@ -199,10 +192,7 @@ class _ServiceCardTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFF5F6F5),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: const Color(0xFFE5E7EB),
-          width: 1,
-        ),
+        border: Border.all(color: const Color(0xFFE5E7EB), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -282,11 +272,7 @@ class _ServiceCardTile extends StatelessWidget {
           const SizedBox(height: 16),
 
           // Divider Line
-          const Divider(
-            height: 1.0,
-            thickness: 1.0,
-            color: Color(0xFFE5E7EB),
-          ),
+          const Divider(height: 1.0, thickness: 1.0, color: Color(0xFFE5E7EB)),
           const SizedBox(height: 14),
 
           // Action Buttons Row (EDIT DETAILS | REMOVE)
@@ -363,11 +349,7 @@ class _AddServiceFabWidget extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.add_rounded,
-                size: 18,
-                color: Colors.white,
-              ),
+              const Icon(Icons.add_rounded, size: 18, color: Colors.white),
               const SizedBox(width: 8),
               Text(
                 'ADD SERVICE',

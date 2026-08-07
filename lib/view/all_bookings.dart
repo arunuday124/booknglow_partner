@@ -425,7 +425,8 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                       ),
                       const SizedBox(height: 16),
                       // Action Buttons: State Dependent
-                      if (booking.status == 'Accepted') ...[
+                      if (booking.status == 'Confirmed' ||
+                          booking.status == 'Accepted') ...[
                         Row(
                           children: [
                             Expanded(
@@ -535,7 +536,7 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                             Expanded(
                               child: ElevatedButton(
                                 onPressed: () =>
-                                    controller.acceptBooking(booking),
+                                    controller.confirmBooking(booking),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF041C16),
                                   foregroundColor: Colors.white,
@@ -548,7 +549,7 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                                   ),
                                 ),
                                 child: Text(
-                                  'Accept',
+                                  'Confirm',
                                   style: GoogleFonts.inter(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w700,
@@ -644,7 +645,7 @@ class _StatusBadgeItem extends StatelessWidget {
     Color textColor = const Color(0xFF374151);
     IconData iconData = Icons.hourglass_empty_rounded;
 
-    if (status == 'Accepted') {
+    if (status == 'Confirmed' || status == 'Accepted') {
       bgColor = const Color(0xFFDCFCE7);
       textColor = const Color(0xFF166534);
       iconData = Icons.check_circle_outline;

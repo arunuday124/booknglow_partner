@@ -40,7 +40,9 @@ class DashboardController extends GetxController {
     String name = ownerName.value.trim();
     if (name.isEmpty) {
       final user = FirebaseAuth.instance.currentUser;
-      if (user != null && user.displayName != null && user.displayName!.trim().isNotEmpty) {
+      if (user != null &&
+          user.displayName != null &&
+          user.displayName!.trim().isNotEmpty) {
         name = user.displayName!.trim();
       }
     }
@@ -73,10 +75,12 @@ class DashboardController extends GetxController {
 
         if (doc.exists && doc.data() != null) {
           final data = doc.data() as Map<String, dynamic>;
-          if (data['ownerName'] != null && data['ownerName'].toString().isNotEmpty) {
+          if (data['ownerName'] != null &&
+              data['ownerName'].toString().isNotEmpty) {
             ownerName.value = data['ownerName'].toString();
           }
-          if (data['salonName'] != null && data['salonName'].toString().isNotEmpty) {
+          if (data['salonName'] != null &&
+              data['salonName'].toString().isNotEmpty) {
             salonName.value = data['salonName'].toString();
           }
           if (data['ratings'] != null) {
@@ -84,7 +88,8 @@ class DashboardController extends GetxController {
             reviewsRating.value = '${r.toStringAsFixed(1)} ★';
           }
           if (data['reviews'] != null) {
-            totalReviews.value = int.tryParse(data['reviews'].toString()) ?? 128;
+            totalReviews.value =
+                int.tryParse(data['reviews'].toString()) ?? 128;
           }
         }
       }

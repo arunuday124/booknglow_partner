@@ -19,7 +19,10 @@ class ServiceModel {
     required this.salonId,
   });
 
-  factory ServiceModel.fromMap(Map<String, dynamic> map, String defaultSalonId) {
+  factory ServiceModel.fromMap(
+    Map<String, dynamic> map,
+    String defaultSalonId,
+  ) {
     return ServiceModel(
       serviceName: map['serviceName'] ?? map['title'] ?? 'Unnamed Service',
       catagory: map['catagory'] ?? map['category'] ?? map['tag'] ?? 'general',
@@ -51,7 +54,13 @@ class ServicesController extends GetxController {
   final durationController = TextEditingController(text: '30 min');
   final priceController = TextEditingController();
 
-  final List<String> availableCategories = ['Hair', 'Nails', 'Spa', 'Facial', 'Massage'];
+  final List<String> availableCategories = [
+    'Hair',
+    'Nails',
+    'Spa',
+    'Facial',
+    'Massage',
+  ];
   late final RxString selectedCategory = availableCategories.first.obs;
 
   final RxBool isSaving = false.obs;
@@ -90,10 +99,12 @@ class ServicesController extends GetxController {
             final List rawServices = data['services'] as List;
             if (rawServices.isNotEmpty) {
               services.value = rawServices
-                  .map((item) => ServiceModel.fromMap(
-                        Map<String, dynamic>.from(item),
-                        currentUser.uid,
-                      ))
+                  .map(
+                    (item) => ServiceModel.fromMap(
+                      Map<String, dynamic>.from(item),
+                      currentUser.uid,
+                    ),
+                  )
                   .toList();
             }
           }
@@ -164,21 +175,37 @@ class ServicesController extends GetxController {
               const SizedBox(height: 6),
               TextField(
                 controller: serviceNameController,
-                style: GoogleFonts.inter(fontSize: 14, color: const Color(0xFF1F2937)),
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: const Color(0xFF1F2937),
+                ),
                 decoration: InputDecoration(
                   hintText: 'e.g. Gel Manicure',
-                  hintStyle: GoogleFonts.inter(fontSize: 14, color: const Color(0xFF9CA3AF)),
-                  prefixIcon: const Icon(Icons.content_cut_outlined, size: 20, color: Color(0xFF6B7280)),
+                  hintStyle: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: const Color(0xFF9CA3AF),
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.content_cut_outlined,
+                    size: 20,
+                    color: Color(0xFF6B7280),
+                  ),
                   filled: true,
                   fillColor: const Color(0xFFF9FAFB),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 14,
+                  ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF041C16), width: 1.5),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF041C16),
+                      width: 1.5,
+                    ),
                   ),
                 ),
               ),
@@ -205,8 +232,12 @@ class ServicesController extends GetxController {
                         cat,
                         style: GoogleFonts.inter(
                           fontSize: 12,
-                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                          color: isSelected ? Colors.white : const Color(0xFF374151),
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: isSelected
+                              ? Colors.white
+                              : const Color(0xFF374151),
                         ),
                       ),
                       selected: isSelected,
@@ -218,7 +249,9 @@ class ServicesController extends GetxController {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
                         side: BorderSide(
-                          color: isSelected ? const Color(0xFF041C16) : const Color(0xFFD1D5DB),
+                          color: isSelected
+                              ? const Color(0xFF041C16)
+                              : const Color(0xFFD1D5DB),
                         ),
                       ),
                       showCheckmark: false,
@@ -247,21 +280,39 @@ class ServicesController extends GetxController {
                         const SizedBox(height: 6),
                         TextField(
                           controller: durationController,
-                          style: GoogleFonts.inter(fontSize: 14, color: const Color(0xFF1F2937)),
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: const Color(0xFF1F2937),
+                          ),
                           decoration: InputDecoration(
                             hintText: 'e.g. 60 min',
-                            hintStyle: GoogleFonts.inter(fontSize: 14, color: const Color(0xFF9CA3AF)),
-                            prefixIcon: const Icon(Icons.access_time_rounded, size: 20, color: Color(0xFF6B7280)),
+                            hintStyle: GoogleFonts.inter(
+                              fontSize: 14,
+                              color: const Color(0xFF9CA3AF),
+                            ),
+                            prefixIcon: const Icon(
+                              Icons.access_time_rounded,
+                              size: 20,
+                              color: Color(0xFF6B7280),
+                            ),
                             filled: true,
                             fillColor: const Color(0xFFF9FAFB),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 14,
+                            ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                              borderSide: const BorderSide(
+                                color: Color(0xFFD1D5DB),
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFF041C16), width: 1.5),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF041C16),
+                                width: 1.5,
+                              ),
                             ),
                           ),
                         ),
@@ -287,21 +338,39 @@ class ServicesController extends GetxController {
                         TextField(
                           controller: priceController,
                           keyboardType: TextInputType.number,
-                          style: GoogleFonts.inter(fontSize: 14, color: const Color(0xFF1F2937)),
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: const Color(0xFF1F2937),
+                          ),
                           decoration: InputDecoration(
                             hintText: 'e.g. 250',
-                            hintStyle: GoogleFonts.inter(fontSize: 14, color: const Color(0xFF9CA3AF)),
-                            prefixIcon: const Icon(Icons.currency_rupee_rounded, size: 18, color: Color(0xFF6B7280)),
+                            hintStyle: GoogleFonts.inter(
+                              fontSize: 14,
+                              color: const Color(0xFF9CA3AF),
+                            ),
+                            prefixIcon: const Icon(
+                              Icons.currency_rupee_rounded,
+                              size: 18,
+                              color: Color(0xFF6B7280),
+                            ),
                             filled: true,
                             fillColor: const Color(0xFFF9FAFB),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 14,
+                            ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                              borderSide: const BorderSide(
+                                color: Color(0xFFD1D5DB),
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFF041C16), width: 1.5),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF041C16),
+                                width: 1.5,
+                              ),
                             ),
                           ),
                         ),
@@ -332,7 +401,9 @@ class ServicesController extends GetxController {
                             height: 20,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
                             ),
                           )
                         : Text(
@@ -400,8 +471,8 @@ class ServicesController extends GetxController {
             .collection('salons')
             .doc(currentUser.uid)
             .set({
-          'services': FieldValue.arrayUnion([newService.toMap()]),
-        }, SetOptions(merge: true));
+              'services': FieldValue.arrayUnion([newService.toMap()]),
+            }, SetOptions(merge: true));
       }
 
       // Append to local reactive services list
@@ -482,7 +553,9 @@ class ServicesController extends GetxController {
                     height: 1.45,
                   ),
                   children: [
-                    const TextSpan(text: 'Are you sure you really want to remove '),
+                    const TextSpan(
+                      text: 'Are you sure you really want to remove ',
+                    ),
                     TextSpan(
                       text: '"${service.serviceName}"',
                       style: GoogleFonts.inter(
@@ -490,7 +563,10 @@ class ServicesController extends GetxController {
                         color: const Color(0xFF1F2937),
                       ),
                     ),
-                    const TextSpan(text: ' from your service menu? This action cannot be undone.'),
+                    const TextSpan(
+                      text:
+                          ' from your service menu? This action cannot be undone.',
+                    ),
                   ],
                 ),
               ),
@@ -557,8 +633,11 @@ class ServicesController extends GetxController {
   }
 
   Future<void> removeService(ServiceModel service) async {
-    services.removeWhere((item) =>
-        item.serviceName == service.serviceName && item.price == service.price);
+    services.removeWhere(
+      (item) =>
+          item.serviceName == service.serviceName &&
+          item.price == service.price,
+    );
 
     try {
       final User? currentUser = FirebaseAuth.instance.currentUser;
@@ -567,8 +646,8 @@ class ServicesController extends GetxController {
             .collection('salons')
             .doc(currentUser.uid)
             .set({
-          'services': FieldValue.arrayRemove([service.toMap()]),
-        }, SetOptions(merge: true));
+              'services': FieldValue.arrayRemove([service.toMap()]),
+            }, SetOptions(merge: true));
       }
     } catch (e) {
       debugPrint('Error removing service from Firestore: $e');

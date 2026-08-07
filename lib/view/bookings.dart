@@ -421,8 +421,9 @@ class _BookingCardWidget extends GetView<BookingsController> {
                         color: Color(0xFFF3F4F6),
                       ),
                       const SizedBox(height: 16),
-                      // Action Buttons: State Dependent (Accept/Reschedule -> Completed/Cancel -> Completed/Cancelled banner)
-                      if (booking.status == 'Accepted') ...[
+                      // Action Buttons: State Dependent (Confirm/Reschedule -> Completed/Cancel -> Completed/Cancelled banner)
+                      if (booking.status == 'Confirmed' ||
+                          booking.status == 'Accepted') ...[
                         Row(
                           children: [
                             Expanded(
@@ -532,7 +533,7 @@ class _BookingCardWidget extends GetView<BookingsController> {
                             Expanded(
                               child: ElevatedButton(
                                 onPressed: () =>
-                                    controller.acceptBooking(booking),
+                                    controller.confirmBooking(booking),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF041C16),
                                   foregroundColor: Colors.white,
@@ -545,7 +546,7 @@ class _BookingCardWidget extends GetView<BookingsController> {
                                   ),
                                 ),
                                 child: Text(
-                                  'Accept',
+                                  'Confirm',
                                   style: GoogleFonts.inter(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w700,

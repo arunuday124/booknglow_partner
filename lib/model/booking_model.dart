@@ -71,7 +71,14 @@ class BookingModel {
       avatarUrl: data['avatarUrl']?.toString(),
       initials: _generateInitials(name),
       time: data['time']?.toString() ?? '',
-      date: data['date']?.toString() ?? '',
+      date:
+          (data['date'] ??
+                  data['bookingDate'] ??
+                  data['appointmentDate'] ??
+                  data['selectedDate'] ??
+                  data['slotDate'])
+              ?.toString() ??
+          '',
       services: parsedServices['names'] as List<String>,
       totalPrice: calculatedPrice,
       notes: data['notes']?.toString(),

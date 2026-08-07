@@ -89,6 +89,145 @@ class BookingsController extends GetxController {
   /// Returns total count of pending bookings
   int get pendingCount => totalPendingCount.value;
 
+  /// Returns all bookings fetched from Firestore
+  List<BookingModel> get allBookings => _allPendingBookings;
+
+  /// Returns active upcoming bookings (Pending, Accepted, Rescheduled) from Firestore
+  List<BookingModel> get upcomingBookings {
+    final list = _allPendingBookings.where((b) {
+      final s = b.status.toLowerCase();
+      return s == 'pending' ||
+          s == 'accepted' ||
+          s == 'rescheduled' ||
+          s == 'confirmed';
+    }).toList();
+    if (list.isNotEmpty) return list;
+    return _allPendingBookings;
+  }
+
+  /// Helper method to determine if a BookingModel is scheduled strictly for today's date
+  bool _isBookingForToday(BookingModel booking) {
+    final now = DateTime.now();
+
+    bool isSameCalendarDay(DateTime dt) {
+      return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    }
+
+    final dateStr = booking.date.trim();
+
+    // 1. If dateStr is empty, check createdAt timestamp
+    if (dateStr.isEmpty) {
+      if (booking.createdAt != null) {
+        DateTime? createdDate;
+        if (booking.createdAt is Timestamp) {
+          createdDate = (booking.createdAt as Timestamp).toDate();
+        } else if (booking.createdAt is DateTime) {
+          createdDate = booking.createdAt as DateTime;
+        } else if (booking.createdAt is String) {
+          createdDate = DateTime.tryParse(booking.createdAt.toString());
+        }
+
+        if (createdDate != null) {
+          return isSameCalendarDay(createdDate);
+        }
+      }
+      return false;
+    }
+
+    final lowerDate = dateStr.toLowerCase();
+
+    // 2. Check literal "today"
+    if (lowerDate.contains('today')) {
+      return true;
+    }
+
+    // 3. Try parsing ISO / standard DateTime (e.g. "2026-08-06", "2026-08-06T10:30:00")
+    final parsedIso = DateTime.tryParse(dateStr);
+    if (parsedIso != null) {
+      return isSameCalendarDay(parsedIso);
+    }
+
+    // 4. Split by dashes, slashes, or dots (e.g., "06-08-2026", "2026/08/06", "6/8/2026")
+    final parts = dateStr.split(RegExp(r'[-/.]'));
+    if (parts.length == 3) {
+      final p0 = int.tryParse(parts[0]);
+      final p1 = int.tryParse(parts[1]);
+      final p2 = int.tryParse(parts[2]);
+
+      if (p0 != null && p1 != null && p2 != null) {
+        // Format: YYYY-MM-DD or YYYY/MM/DD
+        if (p0 > 1000) {
+          return p0 == now.year && p1 == now.month && p2 == now.day;
+        }
+        // Format: DD-MM-YYYY or MM-DD-YYYY or DD/MM/YYYY
+        if (p2 > 1000) {
+          if (p2 != now.year) return false;
+          if (p0 == now.day && p1 == now.month) return true;
+          if (p1 == now.day && p0 == now.month) return true;
+          return false;
+        }
+      }
+    }
+
+    // 5. Month name matching (e.g. "6 Aug 2026", "August 6, 2026", "6th August")
+    final monthNames = [
+      'jan',
+      'feb',
+      'mar',
+      'apr',
+      'may',
+      'jun',
+      'jul',
+      'aug',
+      'sep',
+      'oct',
+      'nov',
+      'dec',
+    ];
+    final currentMonthName = monthNames[now.month - 1];
+
+    if (lowerDate.contains(currentMonthName)) {
+      final numbers = RegExp(
+        r'\d+',
+      ).allMatches(dateStr).map((m) => int.parse(m.group(0)!)).toList();
+
+      final hasDay = numbers.any((n) => n == now.day);
+      final hasWrongDay = numbers.any(
+        (n) =>
+            n >= 1 &&
+            n <= 31 &&
+            n != now.day &&
+            n != now.year &&
+            n != (now.year % 100),
+      );
+
+      if (hasDay && !hasWrongDay) {
+        final yearInStr = numbers.firstWhere(
+          (n) => n > 31,
+          orElse: () => now.year,
+        );
+        if (yearInStr == now.year || yearInStr == (now.year % 100)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /// Returns upcoming bookings ONLY scheduled for today's date
+  List<BookingModel> get todaysUpcomingBookings {
+    return _allPendingBookings.where((b) {
+      final status = b.status.toLowerCase();
+      final isUpcomingStatus =
+          status == 'pending' ||
+          status == 'accepted' ||
+          status == 'rescheduled' ||
+          status == 'confirmed';
+      return isUpcomingStatus && _isBookingForToday(b);
+    }).toList();
+  }
+
   /// Manual refresh for pull-to-refresh
   Future<void> fetchBookings({bool force = false}) async {
     try {
@@ -159,11 +298,18 @@ class BookingsController extends GetxController {
 
         // 3. Update transactions collection ONLY when status is Completed or Cancelled
         final String lowerStatus = newStatus.toLowerCase();
-        if (lowerStatus == 'completed' || lowerStatus == 'cancelled' || lowerStatus == 'canceled') {
-          final String targetPaymentStatus = lowerStatus == 'completed' ? 'completed' : 'canceled';
+        if (lowerStatus == 'completed' ||
+            lowerStatus == 'cancelled' ||
+            lowerStatus == 'canceled') {
+          final String targetPaymentStatus = lowerStatus == 'completed'
+              ? 'completed'
+              : 'canceled';
 
           // Update strictly the 'paymentStatus' field in matching transaction document
-          final txnDoc = await _firestore.collection('transactions').doc(booking.id).get();
+          final txnDoc = await _firestore
+              .collection('transactions')
+              .doc(booking.id)
+              .get();
           if (txnDoc.exists) {
             await _firestore.collection('transactions').doc(booking.id).update({
               'paymentStatus': targetPaymentStatus,
@@ -198,11 +344,11 @@ class BookingsController extends GetxController {
     }
   }
 
-  /// Action: Accept Booking
-  Future<void> acceptBooking(BookingModel booking) async {
-    await updateBookingStatus(booking, 'Accepted');
+  /// Action: Confirm Booking (updates Firestore status to 'Confirmed')
+  Future<void> confirmBooking(BookingModel booking) async {
+    await updateBookingStatus(booking, 'Confirmed');
     Get.snackbar(
-      'Booking Accepted',
+      'Booking Confirmed',
       'Appointment for ${booking.clientName} has been confirmed.',
       snackPosition: SnackPosition.BOTTOM,
       backgroundColor: const Color(0xFF041C16),
