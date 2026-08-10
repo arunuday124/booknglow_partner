@@ -1,4 +1,3 @@
-import 'package:firebase_ui_firestore/firebase_ui_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -58,125 +57,82 @@ class AllBookingsView extends GetView<BookingsController> {
             const _FilterChipsSection(),
             Expanded(
               child: Obx(() {
-                final query = controller.getFirestoreQuery();
-                return FirestoreListView<BookingModel>(
-                  key: ValueKey(controller.selectedFilter.value),
-                  query: query,
-                  pageSize: 10, // Paginate 10 by 10 instances from Firestore
+                if (controller.isLoadingBookings.value) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32.0),
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF041C16),
+                      ),
+                    ),
+                  );
+                }
+
+                final bookings = controller.filteredAllBookings;
+
+                if (bookings.isEmpty) {
+                  return Center(
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(
+                        parent: BouncingScrollPhysics(),
+                      ),
+                      padding: const EdgeInsets.all(32.0),
+                      child: Container(
+                        width: double.infinity,
+                        constraints: const BoxConstraints(maxWidth: 480),
+                        padding: const EdgeInsets.all(32),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFF3F4F6)),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.event_available_outlined,
+                              size: 48,
+                              color: Color(0xFF9CA3AF),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'No bookings found',
+                              style: GoogleFonts.inter(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF374151),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'There are no bookings matching the selected filter.',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                color: const Color(0xFF6B7280),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.separated(
+                  physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20.0,
                     vertical: 16.0,
                   ),
-                  physics: const BouncingScrollPhysics(),
-                  itemBuilder: (context, doc) {
-                    final booking = doc.data();
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 20.0),
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 480),
-                          child: _AllBookingCardItem(booking: booking),
-                        ),
-                      ),
-                    );
-                  },
-                  emptyBuilder: (context) {
+                  itemCount: bookings.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 20),
+                  itemBuilder: (context, index) {
+                    final booking = bookings[index];
                     return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32.0),
-                        child: Container(
-                          width: double.infinity,
-                          constraints: const BoxConstraints(maxWidth: 480),
-                          padding: const EdgeInsets.all(32),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFF3F4F6)),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.event_available_outlined,
-                                size: 48,
-                                color: Color(0xFF9CA3AF),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'No bookings found',
-                                style: GoogleFonts.inter(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF374151),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'There are no bookings matching the selected filter.',
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.inter(
-                                  fontSize: 14,
-                                  color: const Color(0xFF6B7280),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                  loadingBuilder: (context) {
-                    return const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(32.0),
-                        child: CircularProgressIndicator(
-                          color: Color(0xFF041C16),
-                        ),
-                      ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32.0),
-                        child: Container(
-                          width: double.infinity,
-                          constraints: const BoxConstraints(maxWidth: 480),
-                          padding: const EdgeInsets.all(32),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFF3F4F6)),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.error_outline_rounded,
-                                size: 48,
-                                color: Color(0xFFEF4444),
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Error loading bookings',
-                                style: GoogleFonts.inter(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: const Color(0xFF374151),
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '$error',
-                                textAlign: TextAlign.center,
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  color: const Color(0xFF6B7280),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 480),
+                        child: _AllBookingCardItem(booking: booking),
                       ),
                     );
                   },
@@ -317,7 +273,10 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                       const SizedBox(height: 12),
                       // Prominent Time & Date Pill Container
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFF3F4F6),
                           borderRadius: BorderRadius.circular(10),

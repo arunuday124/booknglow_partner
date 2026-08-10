@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -19,6 +21,10 @@ class BookingsController extends GetxController {
   // Loading state for main page stream
   final RxBool isLoadingBookings = true.obs;
 
+  // Reactive clock — updates every minute to drive the dynamic "Next Up" card
+  final Rx<DateTime> currentTime = DateTime.now().obs;
+  Timer? _clockTimer;
+
   // Selected filter option ('All', 'Pending', 'Accepted', 'Rescheduled', 'Completed', 'Cancelled')
   final RxString selectedFilter = 'All'.obs;
 
@@ -39,6 +45,20 @@ class BookingsController extends GetxController {
   void onInit() {
     super.onInit();
     _bindPendingQueueStream();
+    _startClockTimer();
+  }
+
+  /// Fires every 60 seconds so Obx blocks reading [currentTime] rebuild automatically.
+  void _startClockTimer() {
+    _clockTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      currentTime.value = DateTime.now();
+    });
+  }
+
+  @override
+  void onClose() {
+    _clockTimer?.cancel();
+    super.onClose();
   }
 
   // All pending bookings cache for dynamic queue management
@@ -72,6 +92,7 @@ class BookingsController extends GetxController {
             final docs = snapshot.docs
                 .map((doc) => BookingModel.fromFirestore(doc))
                 .toList();
+            _sortBookingsByCreatedAtDesc(docs);
             _allPendingBookings.assignAll(docs);
             _refreshQueue();
           },
@@ -228,6 +249,86 @@ class BookingsController extends GetxController {
     }).toList();
   }
 
+  /// Parses a booking's [time] string (e.g. "10:30 AM", "14:30", "2:30 PM") into a
+  /// [DateTime] anchored on today's date. Returns null when the string is unparseable
+  /// or empty (those bookings are excluded from the "Next Up" time-based sort).
+  DateTime? _parseBookingTime(BookingModel booking) {
+    final raw = booking.time.trim();
+    if (raw.isEmpty) return null;
+
+    final now = currentTime.value;
+    final today = DateTime(now.year, now.month, now.day);
+
+    // --- 12-hour format: "10:30 AM" / "2:30 PM" / "10 AM" ---
+    final amPmRegex = RegExp(
+      r'^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$',
+      caseSensitive: false,
+    );
+    final amPmMatch = amPmRegex.firstMatch(raw);
+    if (amPmMatch != null) {
+      int hour = int.parse(amPmMatch.group(1)!);
+      final int minute = int.tryParse(amPmMatch.group(2) ?? '0') ?? 0;
+      final String period = amPmMatch.group(3)!.toUpperCase();
+      if (period == 'AM') {
+        if (hour == 12) hour = 0;
+      } else {
+        if (hour != 12) hour += 12;
+      }
+      return today.add(Duration(hours: hour, minutes: minute));
+    }
+
+    // --- 24-hour format: "14:30" / "9:05" ---
+    final h24Regex = RegExp(r'^(\d{1,2}):(\d{2})$');
+    final h24Match = h24Regex.firstMatch(raw);
+    if (h24Match != null) {
+      final int hour = int.parse(h24Match.group(1)!);
+      final int minute = int.parse(h24Match.group(2)!);
+      if (hour < 24 && minute < 60) {
+        return today.add(Duration(hours: hour, minutes: minute));
+      }
+    }
+
+    return null;
+  }
+
+  /// Returns the single booking that should be displayed in the "Next Up" card:
+  /// - Must be for today
+  /// - Must be confirmed or accepted (pending/rescheduled are excluded)
+  /// - Must have a time >= [currentTime]
+  /// - Among all qualifying bookings, the one with the earliest time wins
+  /// - Returns null when there are no confirmed bookings left today (card is hidden)
+  BookingModel? get nextUpBooking {
+    // Reading currentTime.value makes this getter reactive to the 1-min timer.
+    final now = currentTime.value;
+
+    // Only confirmed / accepted bookings qualify for the Next Up card
+    final todayList = todaysUpcomingBookings.where((b) {
+      final s = b.status.toLowerCase();
+      return s == 'confirmed' || s == 'accepted';
+    }).toList();
+
+    if (todayList.isEmpty) return null;
+
+    // Collect bookings whose parsed time is at or after now
+    final upcoming = todayList.where((b) {
+      final t = _parseBookingTime(b);
+      // If time is unparseable, treat it as always upcoming (show it rather than hide it)
+      if (t == null) return true;
+      return !t.isBefore(now);
+    }).toList()
+      ..sort((a, b) {
+        final ta = _parseBookingTime(a);
+        final tb = _parseBookingTime(b);
+        // Null times go to the end of the list
+        if (ta == null && tb == null) return 0;
+        if (ta == null) return 1;
+        if (tb == null) return -1;
+        return ta.compareTo(tb);
+      });
+
+    return upcoming.isNotEmpty ? upcoming.first : null;
+  }
+
   /// Manual refresh for pull-to-refresh
   Future<void> fetchBookings({bool force = false}) async {
     try {
@@ -239,6 +340,7 @@ class BookingsController extends GetxController {
       final docs = snapshot.docs
           .map((doc) => BookingModel.fromFirestore(doc))
           .toList();
+      _sortBookingsByCreatedAtDesc(docs);
       _allPendingBookings.assignAll(docs);
       _refreshQueue();
     } catch (e) {
@@ -249,7 +351,29 @@ class BookingsController extends GetxController {
   /// Returns main queue list (max 5 pending bookings)
   List<BookingModel> get recentPendingBookings => pendingQueueBookings;
 
-  /// Builds a Firestore query for the "See All" page using FirestoreListView with 10-10 pagination
+  /// Returns all bookings filtered by selectedFilter ('All', 'Pending', 'Accepted', 'Rescheduled', 'Completed', 'Cancelled'), sorted by createdAt descending
+  List<BookingModel> get filteredAllBookings {
+    final filter = selectedFilter.value.trim().toLowerCase();
+    final list = _allPendingBookings.toList();
+    _sortBookingsByCreatedAtDesc(list);
+
+    if (filter == 'all') {
+      return list;
+    }
+
+    return list.where((b) {
+      final s = b.status.toLowerCase();
+      if (filter == 'accepted') {
+        return s == 'accepted' || s == 'confirmed';
+      }
+      if (filter == 'cancelled') {
+        return s == 'cancelled' || s == 'canceled';
+      }
+      return s == filter;
+    }).toList();
+  }
+
+  /// Builds a Firestore query for the "See All" page
   Query<BookingModel> getFirestoreQuery() {
     Query query = _firestore
         .collection('bookings')
@@ -271,6 +395,30 @@ class BookingsController extends GetxController {
       fromFirestore: (snapshot, _) => BookingModel.fromFirestore(snapshot),
       toFirestore: (booking, _) => {},
     );
+  }
+
+  /// Sorts bookings list by createdAt timestamp descending (newest bookings first)
+  void _sortBookingsByCreatedAtDesc(List<BookingModel> docs) {
+    docs.sort((a, b) {
+      final dtA = _parseTimestamp(a.createdAt);
+      final dtB = _parseTimestamp(b.createdAt);
+
+      if (dtA != null && dtB != null) {
+        return dtB.compareTo(dtA);
+      }
+      if (dtA != null) return -1;
+      if (dtB != null) return 1;
+      return 0;
+    });
+  }
+
+  DateTime? _parseTimestamp(dynamic val) {
+    if (val == null) return null;
+    if (val is Timestamp) return val.toDate();
+    if (val is DateTime) return val;
+    if (val is String) return DateTime.tryParse(val);
+    if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
+    return null;
   }
 
   /// Action: Update status in Firestore & Local State

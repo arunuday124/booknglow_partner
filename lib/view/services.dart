@@ -163,7 +163,7 @@ class _ServiceListSection extends GetView<ServicesController> {
           final service = controller.services[index];
           return _ServiceCardTile(
             service: service,
-            onEdit: () => controller.editService(service),
+            onEdit: () => controller.showEditServiceModal(context, service),
             onRemove: () => controller.confirmAndRemoveService(service),
           );
         },

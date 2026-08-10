@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
@@ -31,6 +33,10 @@ class RegistrationController extends GetxController {
   // Shop Image Selection & Cropping (OPTIONAL)
   final Rx<File?> selectedShopImage = Rx<File?>(null);
   final ImagePicker _picker = ImagePicker();
+
+  // Location & Geolocation state
+  final RxBool isFetchingLocation = false.obs;
+  final Rx<Position?> currentPosition = Rx<Position?>(null);
 
   final RxBool isLoading = false.obs;
 
@@ -206,12 +212,16 @@ class RegistrationController extends GetxController {
         debugPrint('Error getting FCM push token: $e');
       }
 
+      final GeoPoint locationGeoPoint = currentPosition.value != null
+          ? GeoPoint(currentPosition.value!.latitude, currentPosition.value!.longitude)
+          : const GeoPoint(0, 0);
+
       final Map<String, dynamic> salonData = {
         'address': addressController.text.trim(),
         'categories': selectedCategories.toList(),
         'closingHours': formatTime(closingTime.value),
         'createdAt': FieldValue.serverTimestamp(),
-        'location': const GeoPoint(0, 0),
+        'location': locationGeoPoint,
         'openingHours': formatTime(openingTime.value),
         'ownerName': ownerNameController.text.trim(),
         'phone': phoneNum,
@@ -249,6 +259,95 @@ class RegistrationController extends GetxController {
       );
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  /// Fetches current GPS location, reverse geocodes address into addressController, and captures Geolocation
+  Future<void> fetchCurrentLocation() async {
+    isFetchingLocation.value = true;
+    try {
+      final bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        _showValidationError('Location services are disabled on your device. Please enable GPS.');
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          _showValidationError('Location permission was denied. Please allow location access to fetch address automatically.');
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        _showValidationError('Location permissions are permanently denied. Please enable location permission in system settings.');
+        return;
+      }
+
+      final Position position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+
+      currentPosition.value = position;
+
+      try {
+        final List<Placemark> placemarks = await Geocoding().placemarkFromCoordinates(
+          position.latitude,
+          position.longitude,
+        );
+
+        if (placemarks.isNotEmpty) {
+          final Placemark place = placemarks.first;
+          final List<String> addressParts = [];
+
+          if (place.name != null && place.name!.isNotEmpty && place.name != place.street) {
+            addressParts.add(place.name!);
+          }
+          if (place.street != null && place.street!.isNotEmpty) {
+            addressParts.add(place.street!);
+          }
+          if (place.subLocality != null && place.subLocality!.isNotEmpty) {
+            addressParts.add(place.subLocality!);
+          }
+          if (place.locality != null && place.locality!.isNotEmpty) {
+            addressParts.add(place.locality!);
+          }
+          if (place.administrativeArea != null && place.administrativeArea!.isNotEmpty) {
+            addressParts.add(place.administrativeArea!);
+          }
+          if (place.postalCode != null && place.postalCode!.isNotEmpty) {
+            addressParts.add(place.postalCode!);
+          }
+
+          final String formattedAddress = addressParts.join(', ');
+          if (formattedAddress.isNotEmpty) {
+            addressController.text = formattedAddress;
+          }
+        }
+      } catch (e) {
+        debugPrint('Reverse geocoding notice: $e');
+      }
+
+      Get.snackbar(
+        'Location Captured',
+        'Address & geolocation coordinates updated successfully!',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFF041C16),
+        colorText: Colors.white,
+        margin: const EdgeInsets.all(16),
+        borderRadius: 12,
+        duration: const Duration(seconds: 3),
+        icon: const Icon(Icons.my_location_rounded, color: Colors.white),
+      );
+    } catch (e) {
+      _showValidationError('Failed to fetch location: $e');
+    } finally {
+      isFetchingLocation.value = false;
     }
   }
 

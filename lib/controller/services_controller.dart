@@ -54,6 +54,12 @@ class ServicesController extends GetxController {
   final durationController = TextEditingController(text: '30 min');
   final priceController = TextEditingController();
 
+  // Edit Service Form Controllers
+  final editServiceNameController = TextEditingController();
+  final editDurationController = TextEditingController();
+  final editPriceController = TextEditingController();
+  late final RxString editSelectedCategory = availableCategories.first.obs;
+
   final List<String> availableCategories = [
     'Hair',
     'Nails',
@@ -76,6 +82,9 @@ class ServicesController extends GetxController {
     serviceNameController.dispose();
     durationController.dispose();
     priceController.dispose();
+    editServiceNameController.dispose();
+    editDurationController.dispose();
+    editPriceController.dispose();
     super.onClose();
   }
 
@@ -495,15 +504,408 @@ class ServicesController extends GetxController {
     }
   }
 
-  void editService(ServiceModel service) {
-    Get.snackbar(
-      'Edit Service',
-      'Editing details for ${service.serviceName}...',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: const Color(0xFF041C16),
-      colorText: Colors.white,
-      duration: const Duration(seconds: 2),
+  void editService(ServiceModel service, [BuildContext? context]) {
+    if (context != null) {
+      showEditServiceModal(context, service);
+    } else if (Get.context != null) {
+      showEditServiceModal(Get.context!, service);
+    }
+  }
+
+  /// Opens the Edit Service Form Bottom Sheet Modal pre-populated with service details
+  void showEditServiceModal(BuildContext context, ServiceModel service) {
+    editServiceNameController.text = service.serviceName;
+    editDurationController.text = service.duration;
+    editPriceController.text = service.price.toString();
+
+    final matchedCat = availableCategories.firstWhere(
+      (cat) => cat.toLowerCase() == service.catagory.toLowerCase(),
+      orElse: () => availableCategories.first,
     );
+    editSelectedCategory.value = matchedCat;
+
+    Get.bottomSheet(
+      Container(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Drag Handle Indicator
+              Center(
+                child: Container(
+                  width: 42,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE5E7EB),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+
+              // Title
+              Text(
+                'Edit Service Details',
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF041C16),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Service Name Field
+              Text(
+                'Service Name *',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF374151),
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: editServiceNameController,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: const Color(0xFF1F2937),
+                ),
+                decoration: InputDecoration(
+                  hintText: 'e.g. Haircut & Styling',
+                  hintStyle: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: const Color(0xFF9CA3AF),
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.content_cut_outlined,
+                    size: 20,
+                    color: Color(0xFF6B7280),
+                  ),
+                  filled: true,
+                  fillColor: const Color(0xFFF9FAFB),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 14,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF041C16),
+                      width: 1.5,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Category Selection Chips
+              Text(
+                'Category *',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF374151),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Obx(
+                () => Wrap(
+                  spacing: 8.0,
+                  runSpacing: 8.0,
+                  children: availableCategories.map((cat) {
+                    final isSelected = editSelectedCategory.value == cat;
+                    return ChoiceChip(
+                      label: Text(
+                        cat,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          color: isSelected
+                              ? Colors.white
+                              : const Color(0xFF374151),
+                        ),
+                      ),
+                      selected: isSelected,
+                      onSelected: (val) {
+                        if (val) editSelectedCategory.value = cat;
+                      },
+                      selectedColor: const Color(0xFF041C16),
+                      backgroundColor: const Color(0xFFF9FAFB),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: BorderSide(
+                          color: isSelected
+                              ? const Color(0xFF041C16)
+                              : const Color(0xFFD1D5DB),
+                        ),
+                      ),
+                      showCheckmark: false,
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Duration & Price Row
+              Row(
+                children: [
+                  // Duration Field
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Duration *',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF374151),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: editDurationController,
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: const Color(0xFF1F2937),
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'e.g. 45 min',
+                            hintStyle: GoogleFonts.inter(
+                              fontSize: 14,
+                              color: const Color(0xFF9CA3AF),
+                            ),
+                            prefixIcon: const Icon(
+                              Icons.access_time_rounded,
+                              size: 20,
+                              color: Color(0xFF6B7280),
+                            ),
+                            filled: true,
+                            fillColor: const Color(0xFFF9FAFB),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 14,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                color: Color(0xFFD1D5DB),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF041C16),
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+
+                  // Price Field
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Price (₹) *',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF374151),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: editPriceController,
+                          keyboardType: TextInputType.number,
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: const Color(0xFF1F2937),
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'e.g. 500',
+                            hintStyle: GoogleFonts.inter(
+                              fontSize: 14,
+                              color: const Color(0xFF9CA3AF),
+                            ),
+                            prefixIcon: const Icon(
+                              Icons.currency_rupee_rounded,
+                              size: 18,
+                              color: Color(0xFF6B7280),
+                            ),
+                            filled: true,
+                            fillColor: const Color(0xFFF9FAFB),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 14,
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                color: Color(0xFFD1D5DB),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF041C16),
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // Submit Button
+              Obx(
+                () => SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: isSaving.value
+                        ? null
+                        : () => updateService(service),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF041C16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: isSaving.value
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : Text(
+                            'UPDATE SERVICE',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8,
+                              color: Colors.white,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+    );
+  }
+
+  /// Validates inputs and updates an existing service in Firestore & local list
+  Future<void> updateService(ServiceModel oldService) async {
+    final String name = editServiceNameController.text.trim();
+    final String duration = editDurationController.text.trim();
+    final String priceText = editPriceController.text.trim();
+
+    if (name.isEmpty) {
+      _showError('Please enter a service name.');
+      return;
+    }
+    if (duration.isEmpty) {
+      _showError('Please enter the service duration.');
+      return;
+    }
+    if (priceText.isEmpty) {
+      _showError('Please enter the service price.');
+      return;
+    }
+
+    final int? priceInt = int.tryParse(priceText);
+    if (priceInt == null || priceInt < 0) {
+      _showError('Please enter a valid price amount.');
+      return;
+    }
+
+    isSaving.value = true;
+    try {
+      final User? currentUser = FirebaseAuth.instance.currentUser;
+      final String salonId = currentUser?.uid ?? oldService.salonId;
+
+      final ServiceModel updatedService = ServiceModel(
+        serviceName: name,
+        catagory: editSelectedCategory.value.toLowerCase(),
+        duration: duration,
+        price: priceInt,
+        salonId: salonId,
+      );
+
+      final index = services.indexOf(oldService);
+      if (index != -1) {
+        services[index] = updatedService;
+      } else {
+        final findIdx = services.indexWhere(
+          (s) => s.serviceName == oldService.serviceName && s.price == oldService.price,
+        );
+        if (findIdx != -1) {
+          services[findIdx] = updatedService;
+        }
+      }
+
+      // Store/Update in Cloud Firestore if user is authenticated
+      if (currentUser != null) {
+        await FirebaseFirestore.instance
+            .collection('salons')
+            .doc(currentUser.uid)
+            .set({
+              'services': services.map((s) => s.toMap()).toList(),
+            }, SetOptions(merge: true));
+      }
+
+      Get.back(); // Close bottom sheet modal
+
+      Get.snackbar(
+        'Service Updated',
+        '${updatedService.serviceName} details updated successfully!',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFF041C16),
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+    } catch (e) {
+      _showError('Failed to update service: $e');
+    } finally {
+      isSaving.value = false;
+    }
   }
 
   /// Prompts a confirmation dialog before removing a service

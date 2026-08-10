@@ -337,8 +337,12 @@ class _NextUpSection extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Obx(() {
-          final bookings = bookingsCtrl.upcomingBookings;
-          if (bookings.isEmpty) {
+          // Subscribing to currentTime makes this Obx rebuild every minute automatically.
+          // ignore: unused_local_variable
+          final _ = bookingsCtrl.currentTime.value;
+          final nextItem = bookingsCtrl.nextUpBooking;
+
+          if (nextItem == null) {
             return Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(
@@ -369,7 +373,6 @@ class _NextUpSection extends StatelessWidget {
             );
           }
 
-          final nextItem = bookings.first;
           final clientName = nextItem.clientName;
           final service = nextItem.serviceName.isNotEmpty
               ? nextItem.serviceName
@@ -392,113 +395,205 @@ class _NextUpSection extends StatelessWidget {
                 ),
               ],
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Client Avatar / Initials
-                Container(
-                  width: 54,
-                  height: 54,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF1E463C),
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    nextItem.initials,
-                    style: GoogleFonts.inter(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                // Appointment Details Column
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              clientName,
-                              style: GoogleFonts.playfairDisplay(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFEFE0D3),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              nextItem.status,
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: const Color(0xFF5C4E3D),
-                              ),
-                            ),
-                          ),
-                        ],
+                // ── Booking info row ──────────────────────────────────────
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Client Avatar / Initials
+                    Container(
+                      width: 54,
+                      height: 54,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF1E463C),
+                        shape: BoxShape.circle,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        service,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      alignment: Alignment.center,
+                      child: Text(
+                        nextItem.initials,
                         style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                          color: const Color(0xFFB0C4BE),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      Row(
+                    ),
+                    const SizedBox(width: 14),
+                    // Appointment Details Column
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(
-                            Icons.access_time,
-                            size: 14,
-                            color: Color(0xFFB0C4BE),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  clientName,
+                                  style: GoogleFonts.playfairDisplay(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEFE0D3),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  nextItem.status,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFF5C4E3D),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(height: 4),
                           Text(
-                            time,
+                            service,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              color: const Color(0xFFB0C4BE),
                             ),
                           ),
-                          const SizedBox(width: 14),
-                          const Icon(
-                            Icons.payments_outlined,
-                            size: 14,
-                            color: Color(0xFFB0C4BE),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '₹${nextItem.totalPrice.toStringAsFixed(0)}',
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w500,
-                            ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.access_time,
+                                size: 14,
+                                color: Color(0xFFB0C4BE),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                time,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              const Icon(
+                                Icons.payments_outlined,
+                                size: 14,
+                                color: Color(0xFFB0C4BE),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '₹${nextItem.totalPrice.toStringAsFixed(0)}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
+                ),
+                // ── Divider ───────────────────────────────────────────────
+                const SizedBox(height: 14),
+                const Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: Color(0xFF1E463C),
+                ),
+                const SizedBox(height: 14),
+                // ── Action Buttons ────────────────────────────────────────
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () =>
+                            bookingsCtrl.confirmCompleteBooking(nextItem),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF0A2B23),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.task_alt_rounded,
+                              size: 16,
+                              color: Color(0xFF0A2B23),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Completed',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF0A2B23),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () =>
+                            bookingsCtrl.confirmCancelBooking(nextItem),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: const Color(0x1AFFFFFF),
+                          foregroundColor: const Color(0xFFB0C4BE),
+                          elevation: 0,
+                          side: const BorderSide(
+                            color: Color(0x4DB0C4BE),
+                            width: 1.2,
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.cancel_outlined,
+                              size: 16,
+                              color: Color(0xFFB0C4BE),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Cancel',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFFB0C4BE),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

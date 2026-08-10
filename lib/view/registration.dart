@@ -246,6 +246,59 @@ class _RegistrationCardForm extends GetView<RegistrationController> {
             icon: Icons.location_on_outlined,
             isRequired: true,
           ),
+          const SizedBox(height: 8),
+
+          // Fetch Location Button
+          Obx(
+            () => Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: controller.isFetchingLocation.value
+                    ? null
+                    : controller.fetchCurrentLocation,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  side: const BorderSide(color: Color(0xFF041C16), width: 1.2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  backgroundColor: const Color(0xFFF9FAFB),
+                ),
+                icon: controller.isFetchingLocation.value
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFF041C16),
+                          ),
+                        ),
+                      )
+                    : const Icon(
+                        Icons.my_location_rounded,
+                        size: 16,
+                        color: Color(0xFF041C16),
+                      ),
+                label: Text(
+                  controller.isFetchingLocation.value
+                      ? 'FETCHING LOCATION...'
+                      : (controller.currentPosition.value != null
+                          ? 'LOCATION SET (${controller.currentPosition.value!.latitude.toStringAsFixed(3)}, ${controller.currentPosition.value!.longitude.toStringAsFixed(3)})'
+                          : 'FETCH CURRENT LOCATION'),
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                    color: const Color(0xFF041C16),
+                  ),
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 18),
 
           // Shop / Salon Photo Picker Field (OPTIONAL)
