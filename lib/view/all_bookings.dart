@@ -499,7 +499,7 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                             Expanded(
                               child: ElevatedButton(
                                 onPressed: () =>
-                                    controller.confirmBooking(booking),
+                                    controller.confirmBookingAtomic(booking),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF041C16),
                                   foregroundColor: Colors.white,
@@ -524,14 +524,26 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: OutlinedButton(
-                                onPressed: () =>
-                                    controller.rescheduleBooking(booking),
+                                // Rescheduled bookings get Cancel; Pending get Reschedule
+                                onPressed: booking.status.toLowerCase() ==
+                                        'rescheduled'
+                                    ? () => controller
+                                        .confirmCancelBooking(booking)
+                                    : () => controller
+                                        .rescheduleBooking(booking),
                                 style: OutlinedButton.styleFrom(
                                   backgroundColor: Colors.white,
-                                  foregroundColor: const Color(0xFF041C16),
+                                  foregroundColor:
+                                      booking.status.toLowerCase() ==
+                                              'rescheduled'
+                                          ? const Color(0xFFDC2626)
+                                          : const Color(0xFF041C16),
                                   elevation: 0,
-                                  side: const BorderSide(
-                                    color: Color(0xFFD1D5DB),
+                                  side: BorderSide(
+                                    color: booking.status.toLowerCase() ==
+                                            'rescheduled'
+                                        ? const Color(0xFFDC2626)
+                                        : const Color(0xFFD1D5DB),
                                     width: 1.2,
                                   ),
                                   padding: const EdgeInsets.symmetric(
@@ -542,11 +554,16 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                                   ),
                                 ),
                                 child: Text(
-                                  'Reschedule',
+                                  booking.status.toLowerCase() == 'rescheduled'
+                                      ? 'Cancel'
+                                      : 'Reschedule',
                                   style: GoogleFonts.inter(
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
-                                    color: const Color(0xFF041C16),
+                                    color: booking.status.toLowerCase() ==
+                                            'rescheduled'
+                                        ? const Color(0xFFDC2626)
+                                        : const Color(0xFF041C16),
                                   ),
                                 ),
                               ),

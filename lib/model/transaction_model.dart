@@ -91,6 +91,26 @@ class TransactionModel {
     );
   }
 
+  TransactionModel copyWith({
+    String? id,
+    String? userName,
+    String? paymentMethod,
+    String? paymentStatus,
+    double? amount,
+    String? date,
+    String? serviceName,
+  }) {
+    return TransactionModel(
+      id: id ?? this.id,
+      userName: userName ?? this.userName,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
+      amount: amount ?? this.amount,
+      date: date ?? this.date,
+      serviceName: serviceName ?? this.serviceName,
+    );
+  }
+
   static double _parsePrice(dynamic val) {
     if (val is num) return val.toDouble();
     if (val != null) {

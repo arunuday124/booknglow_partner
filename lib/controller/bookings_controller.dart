@@ -7,7 +7,10 @@ import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../model/booking_model.dart';
+import '../service/slot_service.dart';
 import '../view/all_bookings.dart';
+import '../view/reschedule_bottom_sheet.dart';
+import 'profile_controller.dart';
 import 'transaction_controller.dart';
 
 /// GetX Controller managing bookings state and actions with real-time Firestore integration
@@ -64,14 +67,15 @@ class BookingsController extends GetxController {
   // All pending bookings cache for dynamic queue management
   final RxList<BookingModel> _allPendingBookings = <BookingModel>[].obs;
 
-  /// Refreshes pending queue by filtering active pending items and taking top 5
+  /// Refreshes pending queue by filtering active pending/rescheduled items and taking top 5
   void _refreshQueue() {
-    final pendingList = _allPendingBookings
-        .where((b) => b.status.toLowerCase() == 'pending')
-        .toList();
+    final pendingList = _allPendingBookings.where((b) {
+      final s = b.status.toLowerCase();
+      return s == 'pending' || s == 'rescheduled';
+    }).toList();
 
     totalPendingCount.value = pendingList.length;
-    // Top 5 pending bookings for the main booking page queue
+    // Top 5 pending/rescheduled bookings for the main booking page queue
     pendingQueueBookings.assignAll(pendingList.take(5).toList());
   }
 
@@ -446,21 +450,26 @@ class BookingsController extends GetxController {
     String newStatus,
   ) async {
     try {
-      // 1. Update in local state for instant UI update & top 5 queue recalculation
-      final index = _allPendingBookings.indexWhere((b) => b.id == booking.id);
+      // 1. Update local reactive list immediately for instant UI feedback
+      final bool newLockedState =
+          (newStatus == 'Confirmed' || newStatus == 'Accepted');
+      final index =
+          _allPendingBookings.indexWhere((b) => b.id == booking.id);
       if (index != -1) {
         _allPendingBookings[index] = _allPendingBookings[index].copyWith(
           status: newStatus,
+          isLocked: newLockedState,
         );
         _refreshQueue();
       }
 
       // 2. Update Firestore document ONLY for this specific booking
       if (booking.id.isNotEmpty && !booking.id.startsWith('bk_')) {
-        // Update exact bookings document
+        // Update exact bookings document with isLocked attribute
         await _firestore.collection('bookings').doc(booking.id).update({
           'bookingStatus': newStatus,
           'status': newStatus,
+          'isLocked': newLockedState,
         });
 
         // 3. Update transactions collection ONLY when status is Completed or Cancelled
@@ -470,33 +479,42 @@ class BookingsController extends GetxController {
             lowerStatus == 'canceled') {
           final String targetPaymentStatus = lowerStatus == 'completed'
               ? 'completed'
-              : 'canceled';
+              : 'cancelled';
 
-          // Update strictly the 'paymentStatus' field in matching transaction document
-          final txnDoc = await _firestore
-              .collection('transactions')
-              .doc(booking.id)
-              .get();
-          if (txnDoc.exists) {
-            await _firestore.collection('transactions').doc(booking.id).update({
-              'paymentStatus': targetPaymentStatus,
-            });
-          } else {
-            final txnQuery = await _firestore
-                .collection('transactions')
-                .where('bookingId', isEqualTo: booking.id)
-                .get();
+          try {
+            // 1. Check if document exists with ID == booking.id
+            final docRef =
+                _firestore.collection('transactions').doc(booking.id);
+            final docSnap = await docRef.get();
 
-            for (var doc in txnQuery.docs) {
-              await _firestore.collection('transactions').doc(doc.id).update({
+            if (docSnap.exists) {
+              // ONLY update the paymentStatus attribute, never create a new doc
+              await docRef.update({
                 'paymentStatus': targetPaymentStatus,
               });
+            } else {
+              // 2. Otherwise search for matching document where bookingId == booking.id
+              final querySnap = await _firestore
+                  .collection('transactions')
+                  .where('bookingId', isEqualTo: booking.id)
+                  .get();
+
+              for (var doc in querySnap.docs) {
+                await doc.reference.update({
+                  'paymentStatus': targetPaymentStatus,
+                });
+              }
             }
+          } catch (err) {
+            debugPrint('Transaction paymentStatus update skipped: $err');
           }
 
-          // Trigger TransactionController refresh if active in memory
+          // Trigger in-memory TransactionController update (0 network calls)
           if (Get.isRegistered<TransactionController>()) {
-            Get.find<TransactionController>().fetchTransactions(force: true);
+            Get.find<TransactionController>().updateTransactionStatusInMemory(
+              booking.id,
+              targetPaymentStatus,
+            );
           }
         }
       }
@@ -524,6 +542,286 @@ class BookingsController extends GetxController {
       borderRadius: 12,
       duration: const Duration(seconds: 3),
       icon: const Icon(Icons.check_circle_outline, color: Colors.white),
+    );
+  }
+
+  // ── Atomic Slot-Safe Confirmation ─────────────────────────────────────────
+
+  /// Confirms a booking using the `isLocked` attribute in the bookings collection.
+  /// If the slot is already locked by another booking on that date and time,
+  /// surfaces a conflict dialog with the next available time slot.
+  Future<void> confirmBookingAtomic(BookingModel booking) async {
+    if (booking.time.isEmpty || booking.date.isEmpty) {
+      await confirmBooking(booking);
+      return;
+    }
+
+    try {
+      // 1. Check if another booking on the same salon + date + time has isLocked == true
+      final hasConflict = _allPendingBookings.any((b) =>
+          b.id != booking.id &&
+          b.isLocked &&
+          SlotService.isSameDate(b.date, booking.date) &&
+          SlotService.normaliseTimeLabel(b.time) ==
+              SlotService.normaliseTimeLabel(booking.time));
+
+      if (hasConflict) {
+        throw SlotAlreadyBookedException(booking.time);
+      }
+
+      // 2. Lock this booking in the bookings collection directly
+      if (booking.id.isNotEmpty && !booking.id.startsWith('bk_')) {
+        await _firestore.collection('bookings').doc(booking.id).update({
+          'isLocked': true,
+          'bookingStatus': 'Confirmed',
+          'status': 'Confirmed',
+        });
+      }
+
+      // 3. Update local state
+      final index =
+          _allPendingBookings.indexWhere((b) => b.id == booking.id);
+      if (index != -1) {
+        _allPendingBookings[index] = _allPendingBookings[index].copyWith(
+          status: 'Confirmed',
+          isLocked: true,
+        );
+        _refreshQueue();
+      }
+
+      Get.snackbar(
+        'Booking Confirmed',
+        'Appointment for ${booking.clientName} at ${booking.time} confirmed.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFF041C16),
+        colorText: Colors.white,
+        margin: const EdgeInsets.all(16),
+        borderRadius: 12,
+        duration: const Duration(seconds: 3),
+        icon: const Icon(Icons.check_circle_outline, color: Colors.white),
+      );
+    } on SlotAlreadyBookedException catch (_) {
+      // Slot conflict — re-fetch latest bookings and suggest next available
+      await fetchBookings(force: true);
+      final String salonId =
+          booking.salonId.isNotEmpty ? booking.salonId : currentSalonId;
+
+      // Fetch the salon's actual operating hours (reusing in-memory cache first)
+      TimeOfDay opening = const TimeOfDay(hour: 10, minute: 0);
+      TimeOfDay closing = const TimeOfDay(hour: 20, minute: 0);
+      if (Get.isRegistered<ProfileController>()) {
+        final profile = Get.find<ProfileController>();
+        if (profile.openingTime.value != null &&
+            profile.closingTime.value != null) {
+          opening = profile.openingTime.value!;
+          closing = profile.closingTime.value!;
+        }
+      } else {
+        try {
+          final salonDoc =
+              await _firestore.collection('salons').doc(salonId).get();
+          if (salonDoc.exists && salonDoc.data() != null) {
+            final data = salonDoc.data()!;
+            final String openStr =
+                (data['openingHours'] ?? '10:00 AM').toString();
+            final String closeStr =
+                (data['closingHours'] ?? '08:00 PM').toString();
+            opening = _parseTimeOfDay(openStr) ?? opening;
+            closing = _parseTimeOfDay(closeStr) ?? closing;
+          }
+        } catch (_) {
+          // Fall back to defaults silently
+        }
+      }
+
+      // Extract booked times from in-memory bookings cache (0 network calls)
+      final bookedTimes = SlotService.extractBookedTimesFromModels(
+        _allPendingBookings,
+        booking.date,
+      );
+
+      // Generate slots using the salon's real hours so order and coverage match
+      final allSlots = SlotService.generateSlots(opening, closing);
+      final merged = SlotService.mergeSlots(allSlots, bookedTimes);
+      final next = SlotService.findNextAvailable(merged, booking.time);
+
+      _showSlotConflictDialog(booking, next?.label);
+    } catch (e) {
+      Get.snackbar(
+        'Error',
+        'Failed to confirm booking: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red.shade700,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  /// Cancels a booking and sets isLocked to false so the slot becomes available.
+  Future<void> cancelBookingAtomic(BookingModel booking) async {
+    await updateBookingStatus(booking, 'Cancelled');
+  }
+
+  /// Parses a time string like "10:00 AM", "8 PM", "20:00" into [TimeOfDay].
+  TimeOfDay? _parseTimeOfDay(String raw) {
+    try {
+      final clean = raw.trim().toUpperCase();
+      final isPm = clean.contains('PM');
+      final isAm = clean.contains('AM');
+      final digits = clean.replaceAll(RegExp(r'[^0-9:]'), '');
+      final parts = digits.split(':');
+      if (parts.isEmpty || parts[0].isEmpty) return null;
+      int hour = int.parse(parts[0]);
+      final int minute =
+          parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+      if (isPm && hour < 12) hour += 12;
+      if (isAm && hour == 12) hour = 0;
+      return TimeOfDay(hour: hour, minute: minute);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Shows a dialog informing the partner about a slot conflict and suggesting
+  /// the next available slot.
+  void _showSlotConflictDialog(BookingModel booking, String? nextSlot) {
+    Get.dialog(
+      Dialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 56,
+                height: 56,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFEF3C7),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.schedule_rounded,
+                  color: Color(0xFFB45309),
+                  size: 30,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Slot Already Booked',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.playfairDisplay(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF041C16),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'The ${booking.time} slot on ${booking.date} has just been booked by another customer.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: const Color(0xFF4B5563),
+                  height: 1.4,
+                ),
+              ),
+              if (nextSlot != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(12),
+                    border:
+                        Border.all(color: const Color(0xFFBBF7D0)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.access_time_filled_rounded,
+                        size: 16,
+                        color: Color(0xFF15803D),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Next available: $nextSlot',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF15803D),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Get.back(),
+                      style: OutlinedButton.styleFrom(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 12),
+                        side:
+                            const BorderSide(color: Color(0xFFD1D5DB)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                      child: Text(
+                        'Dismiss',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF4B5563),
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (nextSlot != null) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Get.back();
+                          // Update booking with suggested next slot
+                          _updateBookingTime(
+                              booking, nextSlot, booking.date);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF041C16),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                        child: Text(
+                          'Use $nextSlot',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -701,7 +999,7 @@ class BookingsController extends GetxController {
                     child: ElevatedButton(
                       onPressed: () {
                         Get.back();
-                        cancelBooking(booking);
+                        cancelBookingAtomic(booking);
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFDC2626),
@@ -763,132 +1061,50 @@ class BookingsController extends GetxController {
     );
   }
 
-  /// Action: Reschedule Booking
+  /// Action: Reschedule Booking — opens dynamic date & time slot picker
   void rescheduleBooking(BookingModel booking) {
     Get.bottomSheet(
-      Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE5E7EB),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Reschedule Request',
-              style: GoogleFonts.inter(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF041C16),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Propose a new time for ${booking.clientName} (${booking.serviceName})',
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                color: const Color(0xFF6B7280),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      _updateBookingTime(booking, '10:00 AM', '05 Aug 2026');
-                      Get.back();
-                    },
-                    icon: const Icon(Icons.schedule, size: 18),
-                    label: const Text('10:00 AM, 05 Aug'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF3F4F6),
-                      foregroundColor: const Color(0xFF041C16),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      _updateBookingTime(booking, '4:00 PM', '05 Aug 2026');
-                      Get.back();
-                    },
-                    icon: const Icon(Icons.schedule, size: 18),
-                    label: const Text('4:00 PM, 05 Aug'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF3F4F6),
-                      foregroundColor: const Color(0xFF041C16),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: () {
-                  _updateBookingTime(booking, '5:30 PM', '04 Aug 2026');
-                  Get.back();
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF041C16),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'Confirm New Slot',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+      RescheduleBottomSheet(booking: booking),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      enableDrag: true,
     );
   }
 
-  Future<void> _updateBookingTime(
+  /// Action: Reschedule booking with a selected time slot and date
+  Future<void> rescheduleBookingWithSlot(
     BookingModel booking,
-    String time,
-    String date,
+    String newTime,
+    String newDate,
   ) async {
     try {
+      // 1. Update Firestore document (sets new time/date and unlocks slot until confirmed)
       if (booking.id.isNotEmpty && !booking.id.startsWith('bk_')) {
         await _firestore.collection('bookings').doc(booking.id).update({
           'bookingStatus': 'Rescheduled',
-          'time': time,
-          'date': date,
+          'status': 'Rescheduled',
+          'time': newTime,
+          'date': newDate,
+          'isLocked': false,
         });
       }
+
+      // 2. Update local state immediately
+      final index =
+          _allPendingBookings.indexWhere((b) => b.id == booking.id);
+      if (index != -1) {
+        _allPendingBookings[index] = _allPendingBookings[index].copyWith(
+          status: 'Rescheduled',
+          time: newTime,
+          date: newDate,
+          isLocked: false,
+        );
+        _refreshQueue();
+      }
+
       Get.snackbar(
         'Booking Rescheduled',
-        'Proposed new time ($time, $date) for ${booking.clientName}.',
+        'Appointment for ${booking.clientName} moved to $newTime on $newDate.',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: const Color(0xFF041C16),
         colorText: Colors.white,
@@ -900,12 +1116,20 @@ class BookingsController extends GetxController {
     } catch (e) {
       Get.snackbar(
         'Error',
-        'Failed to reschedule booking in Firestore: $e',
+        'Failed to reschedule booking: $e',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red.shade700,
         colorText: Colors.white,
       );
     }
+  }
+
+  Future<void> _updateBookingTime(
+    BookingModel booking,
+    String time,
+    String date,
+  ) async {
+    await rescheduleBookingWithSlot(booking, time, date);
   }
 
   /// Action: Navigate to See All Page

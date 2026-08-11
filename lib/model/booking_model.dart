@@ -18,6 +18,7 @@ class BookingModel {
   final String paymentMethod;
   final String userId;
   final dynamic createdAt;
+  final bool isLocked;
 
   BookingModel({
     required this.id,
@@ -36,6 +37,7 @@ class BookingModel {
     this.paymentMethod = 'cash',
     this.userId = '',
     this.createdAt,
+    this.isLocked = false,
   }) : initials = initials ?? _generateInitials(clientName),
        _services = services != null
            ? List<String>.from(services)
@@ -64,6 +66,9 @@ class BookingModel {
     if (calculatedPrice <= 0.0) {
       calculatedPrice = parsedServices['total'] as double;
     }
+
+    final bool locked = data['isLocked'] == true ||
+        (data['isLocked']?.toString().toLowerCase() == 'true');
 
     return BookingModel(
       id: docId,
@@ -94,6 +99,7 @@ class BookingModel {
       paymentMethod: data['paymentMethod']?.toString() ?? 'cash',
       userId: data['userId']?.toString() ?? '',
       createdAt: data['createdAt'],
+      isLocked: locked,
     );
   }
 
@@ -169,6 +175,7 @@ class BookingModel {
     String? paymentMethod,
     String? userId,
     dynamic createdAt,
+    bool? isLocked,
   }) {
     return BookingModel(
       id: id ?? this.id,
@@ -187,6 +194,7 @@ class BookingModel {
       paymentMethod: paymentMethod ?? this.paymentMethod,
       userId: userId ?? this.userId,
       createdAt: createdAt ?? this.createdAt,
+      isLocked: isLocked ?? this.isLocked,
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../controller/bookings_controller.dart';
 import '../model/transaction_model.dart';
 
 class TransactionController extends GetxController {
@@ -56,6 +57,29 @@ class TransactionController extends GetxController {
     );
   }
 
+  /// Updates transaction payment status in-memory without extra network re-fetch
+  void updateTransactionStatusInMemory(
+    String bookingId,
+    String targetPaymentStatus,
+  ) {
+    final index = transactions.indexWhere(
+      (t) => t.id == bookingId,
+    );
+    if (index != -1) {
+      final old = transactions[index];
+      String displayStatus = 'Pending';
+      final lower = targetPaymentStatus.toLowerCase();
+      if (lower == 'completed' || lower == 'paid') {
+        displayStatus = 'Completed';
+      } else if (lower == 'cancelled' ||
+          lower == 'canceled' ||
+          lower == 'failed') {
+        displayStatus = 'Cancelled';
+      }
+      transactions[index] = old.copyWith(paymentStatus: displayStatus);
+    }
+  }
+
   /// Fetches transactions from Firestore for authenticated salon owner
   Future<void> fetchTransactions({bool force = false}) async {
     if (!force && transactions.isNotEmpty) {
@@ -70,27 +94,51 @@ class TransactionController extends GetxController {
       final String salonId = currentUser?.uid ?? '';
 
       if (salonId.isNotEmpty) {
-        // Query transactions collection for current salon
+        // 1. Query transactions collection for current salon
         final QuerySnapshot txnQuery = await FirebaseFirestore.instance
             .collection('transactions')
             .where('salonId', isEqualTo: salonId)
             .get();
 
-        // Also query bookings collection for current salon
-        final QuerySnapshot bookingQuery = await FirebaseFirestore.instance
-            .collection('bookings')
-            .where('salonId', isEqualTo: salonId)
-            .get();
-
         final Map<String, TransactionModel> loadedMap = {};
 
-        // Load bookings first
-        for (var doc in bookingQuery.docs) {
-          final data = doc.data() as Map<String, dynamic>;
-          loadedMap[doc.id] = TransactionModel.fromMap(data, doc.id);
+        // 2. Reuse in-memory bookings cache if BookingsController is active (0 network calls)
+        if (Get.isRegistered<BookingsController>() &&
+            Get.find<BookingsController>().allBookings.isNotEmpty) {
+          final allBookings = Get.find<BookingsController>().allBookings;
+          for (var b in allBookings) {
+            String status = 'Pending';
+            final lower = b.status.toLowerCase();
+            if (lower == 'completed' || lower == 'paid') {
+              status = 'Completed';
+            } else if (lower == 'cancelled' || lower == 'canceled') {
+              status = 'Cancelled';
+            }
+            loadedMap[b.id] = TransactionModel(
+              id: b.id,
+              userName: b.clientName.isNotEmpty ? b.clientName : 'Guest User',
+              paymentMethod:
+                  b.paymentMethod.isNotEmpty ? b.paymentMethod : 'UPI',
+              paymentStatus: status,
+              amount: b.totalPrice,
+              date: '${b.time} • ${b.date}',
+              serviceName: b.serviceName,
+            );
+          }
+        } else {
+          // Fallback only if BookingsController is not available
+          final QuerySnapshot bookingQuery = await FirebaseFirestore.instance
+              .collection('bookings')
+              .where('salonId', isEqualTo: salonId)
+              .get();
+
+          for (var doc in bookingQuery.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            loadedMap[doc.id] = TransactionModel.fromMap(data, doc.id);
+          }
         }
 
-        // Merge with transactions collection docs
+        // 3. Merge with transactions collection docs
         for (var doc in txnQuery.docs) {
           final data = doc.data() as Map<String, dynamic>;
           final String idKey = (data['bookingId'] ?? doc.id).toString();
