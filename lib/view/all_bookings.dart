@@ -274,12 +274,16 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                       // Prominent Time & Date Pill Container
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
+                          horizontal: 14,
+                          vertical: 9,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF3F4F6),
+                          color: const Color(0xFFF5E4D7),
                           borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFFE8C9B0),
+                            width: 1,
+                          ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -287,7 +291,7 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                             const Icon(
                               Icons.access_time_filled_rounded,
                               size: 15,
-                              color: Color(0xFF041C16),
+                              color: Color(0xFF92400E),
                             ),
                             const SizedBox(width: 8),
                             Text(
@@ -295,7 +299,7 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                               style: GoogleFonts.inter(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
-                                color: const Color(0xFF041C16),
+                                color: const Color(0xFF7C2D12),
                               ),
                             ),
                           ],

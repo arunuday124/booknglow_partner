@@ -326,7 +326,7 @@ class _NextUpSection extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              'Next Up',
+              'Ongoing Booking',
               style: GoogleFonts.inter(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,

@@ -294,9 +294,11 @@ class BookingsController extends GetxController {
   /// Returns the single booking that should be displayed in the "Next Up" card:
   /// - Must be for today
   /// - Must be confirmed or accepted (pending/rescheduled are excluded)
-  /// - Must have a time >= [currentTime]
-  /// - Among all qualifying bookings, the one with the earliest time wins
-  /// - Returns null when there are no confirmed bookings left today (card is hidden)
+  /// - Priority 1: The booking that has already started (time <= now) — the most
+  ///   recent one before now represents the currently in-progress appointment.
+  /// - Priority 2: If no booking has started yet, show the next upcoming one
+  ///   (earliest time strictly after now).
+  /// - Returns null when there are no confirmed bookings for today (card is hidden)
   BookingModel? get nextUpBooking {
     // Reading currentTime.value makes this getter reactive to the 1-min timer.
     final now = currentTime.value;
@@ -309,21 +311,38 @@ class BookingsController extends GetxController {
 
     if (todayList.isEmpty) return null;
 
-    // Collect bookings whose parsed time is at or after now
-    final upcoming = todayList.where((b) {
+    // ── Priority 1: bookings that have already started (time <= now) ──────────
+    // Pick the most recent one before now — that is the current appointment.
+    final alreadyStarted = todayList.where((b) {
       final t = _parseBookingTime(b);
-      // If time is unparseable, treat it as always upcoming (show it rather than hide it)
-      if (t == null) return true;
-      return !t.isBefore(now);
+      if (t == null) return false; // unparseable times fall through to priority 2
+      return !t.isAfter(now); // t <= now
     }).toList()
       ..sort((a, b) {
         final ta = _parseBookingTime(a);
         final tb = _parseBookingTime(b);
-        // Null times go to the end of the list
         if (ta == null && tb == null) return 0;
         if (ta == null) return 1;
         if (tb == null) return -1;
-        return ta.compareTo(tb);
+        return tb.compareTo(ta); // descending: latest started first
+      });
+
+    if (alreadyStarted.isNotEmpty) return alreadyStarted.first;
+
+    // ── Priority 2: no booking has started yet — show the next upcoming one ───
+    final upcoming = todayList.where((b) {
+      final t = _parseBookingTime(b);
+      // If time is unparseable, treat it as upcoming (show rather than hide)
+      if (t == null) return true;
+      return t.isAfter(now); // strictly in the future
+    }).toList()
+      ..sort((a, b) {
+        final ta = _parseBookingTime(a);
+        final tb = _parseBookingTime(b);
+        if (ta == null && tb == null) return 0;
+        if (ta == null) return 1;
+        if (tb == null) return -1;
+        return ta.compareTo(tb); // ascending: earliest upcoming first
       });
 
     return upcoming.isNotEmpty ? upcoming.first : null;
