@@ -9,6 +9,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../service/bunny_cdn_service.dart';
 import '../view/help_and_support.dart';
 import '../view/login.dart';
 import '../view/salon_details.dart';
@@ -54,6 +55,8 @@ class ProfileController extends GetxController {
 
   final RxBool isLoading = false.obs;
   final RxBool isSaving = false.obs;
+  final RxBool isUploadingImage = false.obs;
+  final RxString savingStatus = ''.obs;
 
   @override
   void onInit() {
@@ -283,6 +286,7 @@ class ProfileController extends GetxController {
     }
 
     isSaving.value = true;
+    savingStatus.value = 'Saving changes...';
     try {
       final User? currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser != null) {
@@ -290,10 +294,41 @@ class ProfileController extends GetxController {
         final dynamic phoneVal = int.tryParse(rawPhone) ?? phoneController.text.trim();
 
         String finalShopImage = shopImageUrlController.text.trim();
+
+        // If user selected/cropped a new image, compress and upload to BunnyCDN
         if (selectedShopImage.value != null) {
-          finalShopImage = selectedShopImage.value!.path;
+          isUploadingImage.value = true;
+          savingStatus.value = 'Compressing & uploading image to CDN...';
+          try {
+            final String uploadedCdnUrl = await BunnyCdnService.instance.uploadShopImage(
+              file: selectedShopImage.value!,
+              salonId: currentUser.uid,
+            );
+
+            // Clean up previous BunnyCDN image if it was replaced
+            final String previousImage = shopImage.value.trim();
+            if (previousImage.isNotEmpty && previousImage != uploadedCdnUrl) {
+              BunnyCdnService.instance.deleteShopImage(previousImage);
+            }
+
+            finalShopImage = uploadedCdnUrl;
+          } catch (uploadError) {
+            debugPrint('[ProfileController] Image upload failed: $uploadError');
+            _showError('Failed to upload image to CDN: $uploadError');
+            isSaving.value = false;
+            isUploadingImage.value = false;
+            savingStatus.value = '';
+            return;
+          } finally {
+            isUploadingImage.value = false;
+          }
+        } else if (shopImageUrlController.text.trim().isEmpty && shopImage.value.isNotEmpty) {
+          // User explicitly removed the image
+          BunnyCdnService.instance.deleteShopImage(shopImage.value.trim());
+          finalShopImage = '';
         }
 
+        savingStatus.value = 'Updating salon details...';
         final Map<String, dynamic> updatedData = {
           'salonName': salonNameController.text.trim(),
           'ownerName': ownerNameController.text.trim(),
@@ -326,6 +361,8 @@ class ProfileController extends GetxController {
         closingHours.value = formatTime(closingTime.value);
         categories.assignAll(selectedCategories);
         shopImage.value = finalShopImage;
+        shopImageUrlController.text = finalShopImage;
+        selectedShopImage.value = null;
 
         Get.snackbar(
           'Success',
@@ -343,6 +380,8 @@ class ProfileController extends GetxController {
       _showError('Failed to save salon details: $e');
     } finally {
       isSaving.value = false;
+      isUploadingImage.value = false;
+      savingStatus.value = '';
     }
   }
 
