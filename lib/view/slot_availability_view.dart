@@ -6,7 +6,8 @@ import '../controller/slot_controller.dart';
 import '../model/time_slot_model.dart';
 
 /// Full-screen view showing real-time slot availability for the salon.
-/// Partners can see which time slots are booked and which are free for any date.
+/// Partners can see which time slots are locked/booked and which are free for any date.
+/// Supports pull-to-refresh (scroll-down reload) to keep network calls minimal.
 class SlotAvailabilityView extends StatelessWidget {
   const SlotAvailabilityView({super.key});
 
@@ -63,18 +64,26 @@ class SlotAvailabilityView extends StatelessWidget {
         ),
       ),
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Date Selector ─────────────────────────────────────────────
-            const _DateSelectorSection(),
-            // ── Operating Hours Banner ────────────────────────────────────
-            const _OperatingHoursBanner(),
-            // ── Stats Bar ─────────────────────────────────────────────────
-            const _StatsBar(),
-            // ── Slot Grid ─────────────────────────────────────────────────
-            const Expanded(child: _SlotGrid()),
-          ],
+        child: RefreshIndicator(
+          color: const Color(0xFF041C16),
+          backgroundColor: Colors.white,
+          displacement: 20,
+          onRefresh: controller.refreshSlots,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            slivers: const [
+              // ── Date Selector ─────────────────────────────────────────────
+              SliverToBoxAdapter(child: _DateSelectorSection()),
+              // ── Operating Hours Banner ────────────────────────────────────
+              SliverToBoxAdapter(child: _OperatingHoursBanner()),
+              // ── Stats Bar ─────────────────────────────────────────────────
+              SliverToBoxAdapter(child: _StatsBar()),
+              // ── Slot Grid ─────────────────────────────────────────────────
+              _SlotGridSliver(),
+            ],
+          ),
         ),
       ),
     );
@@ -234,34 +243,12 @@ class _OperatingHoursBanner extends GetView<SlotController> {
                 ),
               ),
               const Spacer(),
-              // Live stream indicator
-              Obx(
-                () => Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 600),
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: controller.isStreamActive.value
-                            ? const Color(0xFF16A34A)
-                            : const Color(0xFF9CA3AF),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      controller.isStreamActive.value ? 'Live' : 'Loading',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: controller.isStreamActive.value
-                            ? const Color(0xFF16A34A)
-                            : const Color(0xFF9CA3AF),
-                      ),
-                    ),
-                  ],
+              Text(
+                '30 min slots',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF92400E),
                 ),
               ),
             ],
@@ -349,21 +336,23 @@ class _StatChip extends StatelessWidget {
   }
 }
 
-// ── Slot Grid ─────────────────────────────────────────────────────────────────
+// ── Slot Grid Sliver ───────────────────────────────────────────────────────────
 
-class _SlotGrid extends GetView<SlotController> {
-  const _SlotGrid();
+class _SlotGridSliver extends GetView<SlotController> {
+  const _SlotGridSliver();
 
   @override
   Widget build(BuildContext context) {
     return Obx(() {
       if (controller.isLoading.value) {
-        return const Center(
+        return const SliverToBoxAdapter(
           child: Padding(
-            padding: EdgeInsets.all(48.0),
-            child: CircularProgressIndicator(
-              color: Color(0xFF041C16),
-              strokeWidth: 2.5,
+            padding: EdgeInsets.all(64.0),
+            child: Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFF041C16),
+                strokeWidth: 2.5,
+              ),
             ),
           ),
         );
@@ -372,51 +361,59 @@ class _SlotGrid extends GetView<SlotController> {
       final slots = controller.slots;
 
       if (slots.isEmpty) {
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.event_busy_outlined,
-                size: 56,
-                color: Color(0xFF9CA3AF),
+        return SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.all(48.0),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.event_busy_outlined,
+                    size: 56,
+                    color: Color(0xFF9CA3AF),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'No slots available',
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF374151),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Operating hours may not be configured.',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: const Color(0xFF6B7280),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                'No slots available',
-                style: GoogleFonts.inter(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF374151),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Operating hours may not be configured.',
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: const Color(0xFF6B7280),
-                ),
-              ),
-            ],
+            ),
           ),
         );
       }
 
-      return GridView.builder(
-        physics: const BouncingScrollPhysics(),
+      return SliverPadding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          childAspectRatio: 2.1,
+        sliver: SliverGrid(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 2.1,
+          ),
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final slot = slots[index];
+              return _SlotTile(slot: slot);
+            },
+            childCount: slots.length,
+          ),
         ),
-        itemCount: slots.length,
-        itemBuilder: (context, index) {
-          final slot = slots[index];
-          return _SlotTile(slot: slot);
-        },
       );
     });
   }
@@ -476,8 +473,8 @@ class _SlotTile extends StatelessWidget {
               fontSize: 11,
               fontWeight: FontWeight.w700,
               color: booked
-                  ? const Color(0xFF9CA3AF)
-                  : const Color(0xFF15803D),
+                ? const Color(0xFF9CA3AF)
+                : const Color(0xFF15803D),
             ),
           ),
           const SizedBox(height: 1),

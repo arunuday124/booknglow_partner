@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -13,23 +11,19 @@ import '../service/slot_service.dart';
 
 /// GetX controller for the Slot Availability screen.
 ///
-/// Optimizations:
-///   - Reuses in-memory salon operating hours from ProfileController (avoids redundant salons.get() read).
-///   - Keeps a single continuous stream of bookings and recalculates slots in-memory on date switches
-///     (0 network calls when clicking dates).
-///   - Recomputes slots dynamically in 0ms.
+/// Configured for purely MANUAL updates (no real-time background streams):
+///   - Loads data on page open using in-memory cache when possible.
+///   - Switching dates recalculates slots instantly in-memory (0 network calls).
+///   - Updates ONLY when the user performs a pull-to-refresh (scroll down) or taps the reload button.
 class SlotController extends GetxController {
   // ── Observables ──────────────────────────────────────────────────────────
 
   final Rx<DateTime> selectedDate = DateTime.now().obs;
   final RxList<TimeSlotModel> slots = <TimeSlotModel>[].obs;
   final RxBool isLoading = true.obs;
-  final RxBool isStreamActive = false.obs;
 
-  final Rx<TimeOfDay> openingTime =
-      const TimeOfDay(hour: 10, minute: 0).obs;
-  final Rx<TimeOfDay> closingTime =
-      const TimeOfDay(hour: 20, minute: 0).obs;
+  final Rx<TimeOfDay> openingTime = const TimeOfDay(hour: 10, minute: 0).obs;
+  final Rx<TimeOfDay> closingTime = const TimeOfDay(hour: 20, minute: 0).obs;
 
   final RxString openingLabel = '10:00 AM'.obs;
   final RxString closingLabel = '08:00 PM'.obs;
@@ -37,7 +31,6 @@ class SlotController extends GetxController {
   // ── Cached bookings for zero-network date switching ──────────────────────
 
   final List<BookingModel> _cachedBookings = [];
-  StreamSubscription? _bookingsStreamSub;
   String _salonId = '';
 
   // ── Firestore ────────────────────────────────────────────────────────────
@@ -50,14 +43,7 @@ class SlotController extends GetxController {
   void onInit() {
     super.onInit();
     _salonId = _currentSalonId;
-    _loadSalonHours();
-    _startListeningToBookings();
-  }
-
-  @override
-  void onClose() {
-    _bookingsStreamSub?.cancel();
-    super.onClose();
+    _loadInitialData();
   }
 
   // ── Public API ───────────────────────────────────────────────────────────
@@ -68,26 +54,61 @@ class SlotController extends GetxController {
     _recomputeSlots();
   }
 
-  /// Force a manual refresh (e.g. pull-to-refresh)
+  /// Force a manual refresh (triggered ONLY by pull-to-refresh or reload button)
   Future<void> refreshSlots() async {
     isLoading.value = true;
-    await _loadSalonHours(force: true);
-    _recomputeSlots();
-    isLoading.value = false;
+    try {
+      // 1. Re-check salon hours
+      await _loadSalonHours(force: false);
+
+      // 2. Synchronize bookings cache with a single clean query
+      if (Get.isRegistered<BookingsController>()) {
+        final bookingsCtrl = Get.find<BookingsController>();
+        await bookingsCtrl.fetchBookings(force: true);
+        _cachedBookings.clear();
+        _cachedBookings.addAll(bookingsCtrl.allBookings);
+      } else {
+        final snapshot = await _db
+            .collection('bookings')
+            .where('salonId', isEqualTo: _salonId)
+            .get();
+        _cachedBookings.clear();
+        _cachedBookings.addAll(
+          snapshot.docs.map((doc) => BookingModel.fromFirestore(doc)),
+        );
+      }
+
+      // 3. Recompute slots in-memory (0 network calls)
+      _recomputeSlots();
+    } catch (e) {
+      debugPrint('SlotController: Error during refreshSlots: $e');
+    } finally {
+      isLoading.value = false;
+    }
   }
 
-  /// Number of available (not booked) slots.
+  /// Number of available (not locked) slots.
   int get availableCount => slots.where((s) => !s.isBooked).length;
 
-  /// Number of booked slots.
+  /// Number of booked / locked slots.
   int get bookedCount => slots.where((s) => s.isBooked).length;
 
   /// Formatted date string for display (e.g. "Mon, Aug 11").
   String get formattedDate {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final d = selectedDate.value;
     return '${days[d.weekday - 1]}, ${months[d.month - 1]} ${d.day}';
@@ -96,8 +117,18 @@ class SlotController extends GetxController {
   /// Firestore date string for the selected date (matches booking documents).
   String get firestoreDateString {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final d = selectedDate.value;
     return '${months[d.month - 1]} ${d.day}, ${d.year}';
@@ -114,6 +145,19 @@ class SlotController extends GetxController {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null && user.uid.isNotEmpty) return user.uid;
     return 'SIZdJ6s5C0h6ckX7YSjLWEFmXnl2';
+  }
+
+  Future<void> _loadInitialData() async {
+    isLoading.value = true;
+    try {
+      await _loadSalonHours();
+      await _loadBookingsOnce();
+      _recomputeSlots();
+    } catch (e) {
+      debugPrint('SlotController: Error loading initial data: $e');
+    } finally {
+      isLoading.value = false;
+    }
   }
 
   Future<void> _loadSalonHours({bool force = false}) async {
@@ -134,63 +178,54 @@ class SlotController extends GetxController {
       final doc = await _db.collection('salons').doc(_salonId).get();
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
-        final String opening =
-            (data['openingHours'] ?? '10:00 AM').toString();
-        final String closing =
-            (data['closingHours'] ?? '08:00 PM').toString();
+        final String opening = (data['openingHours'] ?? '10:00 AM').toString();
+        final String closing = (data['closingHours'] ?? '08:00 PM').toString();
         openingLabel.value = opening;
         closingLabel.value = closing;
-        openingTime.value = _parseTimeLabel(opening) ??
-            const TimeOfDay(hour: 10, minute: 0);
-        closingTime.value = _parseTimeLabel(closing) ??
-            const TimeOfDay(hour: 20, minute: 0);
+        openingTime.value =
+            _parseTimeLabel(opening) ?? const TimeOfDay(hour: 10, minute: 0);
+        closingTime.value =
+            _parseTimeLabel(closing) ?? const TimeOfDay(hour: 20, minute: 0);
       }
     } catch (e) {
       debugPrint('SlotController: Error loading salon hours: $e');
     }
   }
 
-  void _startListeningToBookings() {
-    isLoading.value = true;
-    isStreamActive.value = false;
-
-    // Fast initial population from BookingsController in-memory cache
+  Future<void> _loadBookingsOnce() async {
+    // 1. Check BookingsController in-memory cache first (0 network calls)
     if (Get.isRegistered<BookingsController>()) {
       final bookingsCtrl = Get.find<BookingsController>();
       if (bookingsCtrl.allBookings.isNotEmpty) {
         _cachedBookings.clear();
         _cachedBookings.addAll(bookingsCtrl.allBookings);
-        _recomputeSlots();
-        isLoading.value = false;
-        isStreamActive.value = true;
+        return;
       }
     }
 
-    // Single persistent stream listener
-    _bookingsStreamSub = _db
-        .collection('bookings')
-        .where('salonId', isEqualTo: _salonId)
-        .snapshots()
-        .listen(
-      (snapshot) {
-        _cachedBookings.clear();
-        _cachedBookings.addAll(
-          snapshot.docs.map((doc) => BookingModel.fromFirestore(doc)),
-        );
-        _recomputeSlots();
-        isLoading.value = false;
-        isStreamActive.value = true;
-      },
-      onError: (e) {
-        debugPrint('SlotController: Stream error: $e');
-        isLoading.value = false;
-        isStreamActive.value = false;
-        _recomputeSlots();
-      },
-    );
+    // 2. Fallback to a single one-shot fetch only if in-memory cache is empty
+    try {
+      final snapshot = await _db
+          .collection('bookings')
+          .where('salonId', isEqualTo: _salonId)
+          .get();
+      _cachedBookings.clear();
+      _cachedBookings.addAll(
+        snapshot.docs.map((doc) => BookingModel.fromFirestore(doc)),
+      );
+    } catch (e) {
+      debugPrint('SlotController: Error loading bookings once: $e');
+    }
   }
 
   void _recomputeSlots() {
+    // 1. Sync from in-memory BookingsController cache if available (0 network calls)
+    if (Get.isRegistered<BookingsController>() &&
+        Get.find<BookingsController>().allBookings.isNotEmpty) {
+      _cachedBookings.clear();
+      _cachedBookings.addAll(Get.find<BookingsController>().allBookings);
+    }
+
     final generatedSlots = SlotService.generateSlots(
       openingTime.value,
       closingTime.value,
