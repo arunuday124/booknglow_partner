@@ -236,7 +236,7 @@ class _ProfileOptionListSection extends GetView<ProfileController> {
         _ProfileOptionTile(
           icon: Icons.access_time_outlined,
           title: 'Transaction Details',
-          subtitle: 'View and manage your recent bookings and payment history.',
+          subtitle: 'Manage your recent transactions',
           onTap: controller.onTransactionDetailsTap,
         ),
         const SizedBox(height: 12),
@@ -318,7 +318,10 @@ class _ProfileOptionTile extends StatelessWidget {
                       if (badgeText != null) ...[
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFEFE0D3),
                             borderRadius: BorderRadius.circular(10),
