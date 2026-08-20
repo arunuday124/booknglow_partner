@@ -47,7 +47,7 @@ class BookingsController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _bindPendingQueueStream();
+    fetchBookings();
     _startClockTimer();
   }
 
@@ -77,35 +77,6 @@ class BookingsController extends GetxController {
     totalPendingCount.value = pendingList.length;
     // Top 5 pending/rescheduled bookings for the main booking page queue
     pendingQueueBookings.assignAll(pendingList.take(5).toList());
-  }
-
-  /// Binds real-time Firestore stream for the main booking page queue.
-  void _bindPendingQueueStream() {
-    if (pendingQueueBookings.isEmpty) {
-      isLoadingBookings.value = true;
-    }
-
-    // Listen to bookings collection for current salonId in real-time
-    _firestore
-        .collection('bookings')
-        .where('salonId', isEqualTo: currentSalonId)
-        .snapshots()
-        .listen(
-          (snapshot) {
-            isLoadingBookings.value = false;
-            final docs = snapshot.docs
-                .map((doc) => BookingModel.fromFirestore(doc))
-                .toList();
-            _sortBookingsByCreatedAtDesc(docs);
-            _allPendingBookings.assignAll(docs);
-            _refreshQueue();
-          },
-          onError: (error) {
-            isLoadingBookings.value = false;
-            _refreshQueue();
-            debugPrint('Error listening to bookings stream: $error');
-          },
-        );
   }
 
   /// Returns total count of all bookings for the current salon
@@ -209,6 +180,7 @@ class BookingsController extends GetxController {
       'nov',
       'dec',
     ];
+
     final currentMonthName = monthNames[now.month - 1];
 
     if (lowerDate.contains(currentMonthName)) {
@@ -317,47 +289,54 @@ class BookingsController extends GetxController {
 
     // ── Priority 1: bookings that have already started (time <= now) ──────────
     // Pick the most recent one before now — that is the current appointment.
-    final alreadyStarted = todayList.where((b) {
-      final t = _parseBookingTime(b);
-      if (t == null) return false; // unparseable times fall through to priority 2
-      return !t.isAfter(now); // t <= now
-    }).toList()
-      ..sort((a, b) {
-        final ta = _parseBookingTime(a);
-        final tb = _parseBookingTime(b);
-        if (ta == null && tb == null) return 0;
-        if (ta == null) return 1;
-        if (tb == null) return -1;
-        return tb.compareTo(ta); // descending: latest started first
-      });
+    final alreadyStarted =
+        todayList.where((b) {
+          final t = _parseBookingTime(b);
+          if (t == null) {
+            return false; // unparseable times fall through to priority 2
+          }
+          return !t.isAfter(now); // t <= now
+        }).toList()..sort((a, b) {
+          final ta = _parseBookingTime(a);
+          final tb = _parseBookingTime(b);
+          if (ta == null && tb == null) return 0;
+          if (ta == null) return 1;
+          if (tb == null) return -1;
+          return tb.compareTo(ta); // descending: latest started first
+        });
 
     if (alreadyStarted.isNotEmpty) return alreadyStarted.first;
 
     // ── Priority 2: no booking has started yet — show the next upcoming one ───
-    final upcoming = todayList.where((b) {
-      final t = _parseBookingTime(b);
-      // If time is unparseable, treat it as upcoming (show rather than hide)
-      if (t == null) return true;
-      return t.isAfter(now); // strictly in the future
-    }).toList()
-      ..sort((a, b) {
-        final ta = _parseBookingTime(a);
-        final tb = _parseBookingTime(b);
-        if (ta == null && tb == null) return 0;
-        if (ta == null) return 1;
-        if (tb == null) return -1;
-        return ta.compareTo(tb); // ascending: earliest upcoming first
-      });
+    final upcoming =
+        todayList.where((b) {
+          final t = _parseBookingTime(b);
+          // If time is unparseable, treat it as upcoming (show rather than hide)
+          if (t == null) return true;
+          return t.isAfter(now); // strictly in the future
+        }).toList()..sort((a, b) {
+          final ta = _parseBookingTime(a);
+          final tb = _parseBookingTime(b);
+          if (ta == null && tb == null) return 0;
+          if (ta == null) return 1;
+          if (tb == null) return -1;
+          return ta.compareTo(tb); // ascending: earliest upcoming first
+        });
 
     return upcoming.isNotEmpty ? upcoming.first : null;
   }
 
-  /// Manual refresh for pull-to-refresh
+  /// One-shot fetch for bookings (App initialization & Pull-to-refresh)
   Future<void> fetchBookings({bool force = false}) async {
+    if (_allPendingBookings.isEmpty) {
+      isLoadingBookings.value = true;
+    }
     try {
       final snapshot = await _firestore
           .collection('bookings')
           .where('salonId', isEqualTo: currentSalonId)
+          .orderBy('createdAt', descending: true)
+          .limit(50)
           .get();
 
       final docs = snapshot.docs
@@ -368,6 +347,8 @@ class BookingsController extends GetxController {
       _refreshQueue();
     } catch (e) {
       debugPrint('Error fetching bookings: $e');
+    } finally {
+      isLoadingBookings.value = false;
     }
   }
 
@@ -396,8 +377,8 @@ class BookingsController extends GetxController {
     }).toList();
   }
 
-  /// Builds a Firestore query for the "See All" page
-  Query<BookingModel> getFirestoreQuery() {
+  /// Builds an indexed, paginated Firestore query for the "See All" page
+  Query<BookingModel> getFirestoreQuery({int limit = 20}) {
     Query query = _firestore
         .collection('bookings')
         .where('salonId', isEqualTo: currentSalonId);
@@ -413,6 +394,8 @@ class BookingsController extends GetxController {
         ].contains(filter)) {
       query = query.where('bookingStatus', isEqualTo: filter);
     }
+
+    query = query.orderBy('createdAt', descending: true).limit(limit);
 
     return query.withConverter<BookingModel>(
       fromFirestore: (snapshot, _) => BookingModel.fromFirestore(snapshot),
@@ -453,8 +436,7 @@ class BookingsController extends GetxController {
       // 1. Update local reactive list immediately for instant UI feedback
       final bool newLockedState =
           (newStatus == 'Confirmed' || newStatus == 'Accepted');
-      final index =
-          _allPendingBookings.indexWhere((b) => b.id == booking.id);
+      final index = _allPendingBookings.indexWhere((b) => b.id == booking.id);
       if (index != -1) {
         _allPendingBookings[index] = _allPendingBookings[index].copyWith(
           status: newStatus,
@@ -483,15 +465,14 @@ class BookingsController extends GetxController {
 
           try {
             // 1. Check if document exists with ID == booking.id
-            final docRef =
-                _firestore.collection('transactions').doc(booking.id);
+            final docRef = _firestore
+                .collection('transactions')
+                .doc(booking.id);
             final docSnap = await docRef.get();
 
             if (docSnap.exists) {
               // ONLY update the paymentStatus attribute, never create a new doc
-              await docRef.update({
-                'paymentStatus': targetPaymentStatus,
-              });
+              await docRef.update({'paymentStatus': targetPaymentStatus});
             } else {
               // 2. Otherwise search for matching document where bookingId == booking.id
               final querySnap = await _firestore
@@ -558,12 +539,14 @@ class BookingsController extends GetxController {
 
     try {
       // 1. Check if another booking on the same salon + date + time has isLocked == true
-      final hasConflict = _allPendingBookings.any((b) =>
-          b.id != booking.id &&
-          b.isLocked &&
-          SlotService.isSameDate(b.date, booking.date) &&
-          SlotService.normaliseTimeLabel(b.time) ==
-              SlotService.normaliseTimeLabel(booking.time));
+      final hasConflict = _allPendingBookings.any(
+        (b) =>
+            b.id != booking.id &&
+            b.isLocked &&
+            SlotService.isSameDate(b.date, booking.date) &&
+            SlotService.normaliseTimeLabel(b.time) ==
+                SlotService.normaliseTimeLabel(booking.time),
+      );
 
       if (hasConflict) {
         throw SlotAlreadyBookedException(booking.time);
@@ -579,8 +562,7 @@ class BookingsController extends GetxController {
       }
 
       // 3. Update local state
-      final index =
-          _allPendingBookings.indexWhere((b) => b.id == booking.id);
+      final index = _allPendingBookings.indexWhere((b) => b.id == booking.id);
       if (index != -1) {
         _allPendingBookings[index] = _allPendingBookings[index].copyWith(
           status: 'Confirmed',
@@ -603,8 +585,9 @@ class BookingsController extends GetxController {
     } on SlotAlreadyBookedException catch (_) {
       // Slot conflict — re-fetch latest bookings and suggest next available
       await fetchBookings(force: true);
-      final String salonId =
-          booking.salonId.isNotEmpty ? booking.salonId : currentSalonId;
+      final String salonId = booking.salonId.isNotEmpty
+          ? booking.salonId
+          : currentSalonId;
 
       // Fetch the salon's actual operating hours (reusing in-memory cache first)
       TimeOfDay opening = const TimeOfDay(hour: 10, minute: 0);
@@ -618,14 +601,16 @@ class BookingsController extends GetxController {
         }
       } else {
         try {
-          final salonDoc =
-              await _firestore.collection('salons').doc(salonId).get();
+          final salonDoc = await _firestore
+              .collection('salons')
+              .doc(salonId)
+              .get();
           if (salonDoc.exists && salonDoc.data() != null) {
             final data = salonDoc.data()!;
-            final String openStr =
-                (data['openingHours'] ?? '10:00 AM').toString();
-            final String closeStr =
-                (data['closingHours'] ?? '08:00 PM').toString();
+            final String openStr = (data['openingHours'] ?? '10:00 AM')
+                .toString();
+            final String closeStr = (data['closingHours'] ?? '08:00 PM')
+                .toString();
             opening = _parseTimeOfDay(openStr) ?? opening;
             closing = _parseTimeOfDay(closeStr) ?? closing;
           }
@@ -672,8 +657,7 @@ class BookingsController extends GetxController {
       final parts = digits.split(':');
       if (parts.isEmpty || parts[0].isEmpty) return null;
       int hour = int.parse(parts[0]);
-      final int minute =
-          parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+      final int minute = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
       if (isPm && hour < 12) hour += 12;
       if (isAm && hour == 12) hour = 0;
       return TimeOfDay(hour: hour, minute: minute);
@@ -687,8 +671,7 @@ class BookingsController extends GetxController {
   void _showSlotConflictDialog(BookingModel booking, String? nextSlot) {
     Get.dialog(
       Dialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: Colors.white,
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -732,12 +715,13 @@ class BookingsController extends GetxController {
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 10),
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF0FDF4),
                     borderRadius: BorderRadius.circular(12),
-                    border:
-                        Border.all(color: const Color(0xFFBBF7D0)),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -767,10 +751,8 @@ class BookingsController extends GetxController {
                     child: OutlinedButton(
                       onPressed: () => Get.back(),
                       style: OutlinedButton.styleFrom(
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 12),
-                        side:
-                            const BorderSide(color: Color(0xFFD1D5DB)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: const BorderSide(color: Color(0xFFD1D5DB)),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
@@ -792,15 +774,13 @@ class BookingsController extends GetxController {
                         onPressed: () {
                           Get.back();
                           // Update booking with suggested next slot
-                          _updateBookingTime(
-                              booking, nextSlot, booking.date);
+                          _updateBookingTime(booking, nextSlot, booking.date);
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF041C16),
                           foregroundColor: Colors.white,
                           elevation: 0,
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
@@ -1090,8 +1070,7 @@ class BookingsController extends GetxController {
       }
 
       // 2. Update local state immediately
-      final index =
-          _allPendingBookings.indexWhere((b) => b.id == booking.id);
+      final index = _allPendingBookings.indexWhere((b) => b.id == booking.id);
       if (index != -1) {
         _allPendingBookings[index] = _allPendingBookings[index].copyWith(
           status: 'Rescheduled',

@@ -80,22 +80,30 @@ class SlotService {
     );
   }
 
-  /// Real-time stream: emits an updated set of locked slot labels whenever
-  /// a booking document changes for [salonId] + [date].
-  static Stream<Set<String>> watchBookedSlots(
+  /// Highly-refined one-shot fetch:
+  /// 1. Server-side `isLocked == true` filtering (reduces network payload size).
+  /// 2. Graceful try-catch fallback returning an empty set on network errors.
+  static Future<Set<String>> fetchBookedSlotsOnce(
     String salonId,
     String date, {
     String? excludeBookingId,
-  }) {
-    return _db
-        .collection('bookings')
-        .where('salonId', isEqualTo: salonId)
-        .snapshots()
-        .map((snapshot) => _extractBookedTimes(
-              snapshot.docs,
-              date,
-              excludeBookingId: excludeBookingId,
-            ));
+  }) async {
+    try {
+      final snapshot = await _db
+          .collection('bookings')
+          .where('salonId', isEqualTo: salonId)
+          .where('isLocked', isEqualTo: true) // Server-side filtering
+          .get();
+
+      return _extractBookedTimes(
+        snapshot.docs,
+        date,
+        excludeBookingId: excludeBookingId,
+      );
+    } catch (e) {
+      debugPrint('SlotService error fetching booked slots: $e');
+      return <String>{};
+    }
   }
 
   /// Filters docs to matching date where `isLocked == true`.
