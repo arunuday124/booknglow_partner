@@ -165,6 +165,58 @@ class _RegistrationCardForm extends GetView<RegistrationController> {
           ),
           const SizedBox(height: 18),
 
+          // Salon Type Field (Required: Male, Female, Unisex)
+          Row(
+            children: [
+              Text(
+                'Salon Type',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF374151),
+                ),
+              ),
+              Text(
+                ' *',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red.shade700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Obx(
+            () => Row(
+              children: controller.salonTypes.map((type) {
+                final isSelected =
+                    controller.selectedSalonType.value.toLowerCase() ==
+                        type.toLowerCase();
+                IconData icon;
+                if (type == 'Male') {
+                  icon = Icons.male_rounded;
+                } else if (type == 'Female') {
+                  icon = Icons.female_rounded;
+                } else {
+                  icon = Icons.wc_rounded;
+                }
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 6.0),
+                    child: _TypeChip(
+                      label: type,
+                      icon: icon,
+                      isSelected: isSelected,
+                      onTap: () => controller.selectSalonType(type),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 18),
+
           // Business Categories Multi-Select Chips (Required)
           Row(
             children: [
@@ -738,6 +790,68 @@ class _CustomInputField extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Custom Salon Type Selection Chip Widget (Stateless)
+class _TypeChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _TypeChip({
+    required this.label,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF041C16) : const Color(0xFFF9FAFB),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF041C16) : const Color(0xFFD1D5DB),
+            width: 1.5,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF041C16).withValues(alpha: 0.15),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : [],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isSelected ? const Color(0xFFC5A880) : const Color(0xFF6B7280),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: isSelected ? Colors.white : const Color(0xFF374151),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

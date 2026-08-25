@@ -94,19 +94,17 @@ class TransactionController extends GetxController {
       final String salonId = currentUser?.uid ?? '';
 
       if (salonId.isNotEmpty) {
-        // 1. Query transactions collection for current salon
-        final QuerySnapshot txnQuery = await FirebaseFirestore.instance
-            .collection('transactions')
-            .where('salonId', isEqualTo: salonId)
-            .get();
-
         final Map<String, TransactionModel> loadedMap = {};
 
-        // 2. Reuse in-memory bookings cache if BookingsController is active (0 network calls)
-        if (Get.isRegistered<BookingsController>() &&
-            Get.find<BookingsController>().allBookings.isNotEmpty) {
-          final allBookings = Get.find<BookingsController>().allBookings;
-          for (var b in allBookings) {
+        // 1. Ensure BookingsController is registered and active
+        if (!Get.isRegistered<BookingsController>()) {
+          Get.put(BookingsController());
+        }
+        final bookingsCtrl = Get.find<BookingsController>();
+
+        // 2. Reuse in-memory bookings cache (0 network calls)
+        if (bookingsCtrl.allBookings.isNotEmpty) {
+          for (var b in bookingsCtrl.allBookings) {
             String status = 'Pending';
             final lower = b.status.toLowerCase();
             if (lower == 'completed' || lower == 'paid') {
@@ -125,17 +123,18 @@ class TransactionController extends GetxController {
               serviceName: b.serviceName,
             );
           }
-        } else {
-          // Fallback only if BookingsController is not available
-          final QuerySnapshot bookingQuery = await FirebaseFirestore.instance
-              .collection('bookings')
-              .where('salonId', isEqualTo: salonId)
-              .get();
+        }
 
-          for (var doc in bookingQuery.docs) {
-            final data = doc.data() as Map<String, dynamic>;
-            loadedMap[doc.id] = TransactionModel.fromMap(data, doc.id);
-          }
+        // 3. Query transactions collection for current salon (only for extra transaction-specific records)
+        final QuerySnapshot txnQuery = await FirebaseFirestore.instance
+            .collection('transactions')
+            .where('salonId', isEqualTo: salonId)
+            .get();
+
+        for (var doc in txnQuery.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          final String idKey = (data['bookingId'] ?? doc.id).toString();
+          loadedMap[idKey] = TransactionModel.fromMap(data, idKey);
         }
 
         // 3. Merge with transactions collection docs

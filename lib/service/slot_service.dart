@@ -61,20 +61,15 @@ class SlotService {
 
   // ── 2. Booked-Slot Query ──────────────────────────────────────────────────
 
-  /// One-shot fetch: returns the set of locked slot labels for
-  /// [salonId] + [date].
+  /// One-shot fetch: returns the set of locked slot labels for [salonId] + [date].
+  /// Uses server-side `isLocked == true` filtering to minimize Firestore document reads.
   static Future<Set<String>> fetchBookedSlots(
     String salonId,
     String date, {
     String? excludeBookingId,
   }) async {
-    final snapshot = await _db
-        .collection('bookings')
-        .where('salonId', isEqualTo: salonId)
-        .get();
-
-    return _extractBookedTimes(
-      snapshot.docs,
+    return fetchBookedSlotsOnce(
+      salonId,
       date,
       excludeBookingId: excludeBookingId,
     );

@@ -326,8 +326,18 @@ class BookingsController extends GetxController {
     return upcoming.isNotEmpty ? upcoming.first : null;
   }
 
+  DateTime? _lastFetchTime;
+
   /// One-shot fetch for bookings (App initialization & Pull-to-refresh)
   Future<void> fetchBookings({bool force = false}) async {
+    // Return early from in-memory cache if data was fetched within 5 minutes
+    if (!force &&
+        _allPendingBookings.isNotEmpty &&
+        _lastFetchTime != null &&
+        DateTime.now().difference(_lastFetchTime!) < const Duration(minutes: 5)) {
+      return;
+    }
+
     if (_allPendingBookings.isEmpty) {
       isLoadingBookings.value = true;
     }
@@ -336,7 +346,7 @@ class BookingsController extends GetxController {
           .collection('bookings')
           .where('salonId', isEqualTo: currentSalonId)
           .orderBy('createdAt', descending: true)
-          .limit(50)
+          .limit(15)
           .get();
 
       final docs = snapshot.docs
@@ -345,6 +355,7 @@ class BookingsController extends GetxController {
       _sortBookingsByCreatedAtDesc(docs);
       _allPendingBookings.assignAll(docs);
       _refreshQueue();
+      _lastFetchTime = DateTime.now();
     } catch (e) {
       debugPrint('Error fetching bookings: $e');
     } finally {

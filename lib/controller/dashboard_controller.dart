@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import 'profile_controller.dart';
+
 class DailyLogModel {
   final String title;
   final String status;
@@ -61,7 +63,17 @@ class DashboardController extends GetxController {
 
   /// Fetches salon rating and review metrics dynamically from Firestore
   Future<void> fetchDashboardMetrics({bool force = false}) async {
-    if (!force && salonName.value.isNotEmpty && ownerName.value.isNotEmpty) {
+    // 1. Check ProfileController in memory first (0 network calls)
+    if (!force && Get.isRegistered<ProfileController>()) {
+      final profile = Get.find<ProfileController>();
+      if (profile.salonName.value.isNotEmpty || profile.ownerName.value.isNotEmpty) {
+        if (profile.salonName.value.isNotEmpty) salonName.value = profile.salonName.value;
+        if (profile.ownerName.value.isNotEmpty) ownerName.value = profile.ownerName.value;
+        return;
+      }
+    }
+
+    if (!force && salonName.value.isNotEmpty && ownerName.value.isNotEmpty && salonName.value != 'Zen Salon') {
       return; // Return immediately from memory without extra Firebase calls
     }
 

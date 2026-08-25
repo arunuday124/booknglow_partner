@@ -24,6 +24,7 @@ class ProfileController extends GetxController {
   final RxString shopImage = ''.obs;
   final RxString openingHours = ''.obs;
   final RxString closingHours = ''.obs;
+  final RxString salonType = 'unisex'.obs;
   final RxList<String> categories = <String>[].obs;
 
   // Form controllers for editing Salon Details
@@ -96,6 +97,7 @@ class ProfileController extends GetxController {
           shopImage.value = data['shopImage']?.toString() ?? '';
           openingHours.value = data['openingHours']?.toString() ?? '9 AM';
           closingHours.value = data['closingHours']?.toString() ?? '9 PM';
+          salonType.value = data['salonType']?.toString() ?? 'unisex';
 
           if (data['categories'] != null && data['categories'] is List) {
             final List list = data['categories'] as List;
@@ -364,17 +366,18 @@ class ProfileController extends GetxController {
         shopImageUrlController.text = finalShopImage;
         selectedShopImage.value = null;
 
+        Get.back();
+
         Get.snackbar(
           'Success',
           'Salon details updated successfully!',
-          snackPosition: SnackPosition.BOTTOM,
+          snackPosition: SnackPosition.TOP,
           backgroundColor: const Color(0xFF041C16),
           colorText: Colors.white,
           margin: const EdgeInsets.all(16),
           borderRadius: 12,
+          duration: const Duration(seconds: 3),
         );
-
-        Get.back();
       }
     } catch (e) {
       _showError('Failed to save salon details: $e');

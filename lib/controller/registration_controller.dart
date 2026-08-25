@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../service/bunny_cdn_service.dart';
 import '../view/dashboard.dart';
 
 class RegistrationController extends GetxController {
@@ -29,6 +30,14 @@ class RegistrationController extends GetxController {
   final Rx<TimeOfDay?> closingTime = Rx<TimeOfDay?>(
     const TimeOfDay(hour: 21, minute: 0),
   );
+
+  // Salon Type (REQUIRED: Male, Female, Unisex)
+  final List<String> salonTypes = ['Male', 'Female', 'Unisex'];
+  final RxString selectedSalonType = ''.obs;
+
+  void selectSalonType(String type) {
+    selectedSalonType.value = type;
+  }
 
   // Shop Image Selection & Cropping (OPTIONAL)
   final Rx<File?> selectedShopImage = Rx<File?>(null);
@@ -169,13 +178,19 @@ class RegistrationController extends GetxController {
       return;
     }
 
-    // 4. Validate Categories (Required)
+    // 4. Validate Salon Type (Required)
+    if (selectedSalonType.value.isEmpty) {
+      _showValidationError('Please select a Salon Type.');
+      return;
+    }
+
+    // 5. Validate Categories (Required)
     if (selectedCategories.isEmpty) {
       _showValidationError('Please select at least one business category.');
       return;
     }
 
-    // 5. Validate Opening & Closing Times (Required)
+    // 6. Validate Opening & Closing Times (Required)
     if (openingTime.value == null) {
       _showValidationError('Please select an Opening Time.');
       return;
@@ -186,7 +201,7 @@ class RegistrationController extends GetxController {
       return;
     }
 
-    // 6. Validate Address (Required)
+    // 7. Validate Address (Required)
     if (addressController.text.trim().isEmpty) {
       _showValidationError('Please enter your Salon Address.');
       return;
@@ -216,6 +231,19 @@ class RegistrationController extends GetxController {
           ? GeoPoint(currentPosition.value!.latitude, currentPosition.value!.longitude)
           : const GeoPoint(0, 0);
 
+      // Upload shop image to BunnyCDN if picked by user
+      String shopImageUrl = "";
+      if (selectedShopImage.value != null) {
+        try {
+          shopImageUrl = await BunnyCdnService.instance.uploadShopImage(
+            file: selectedShopImage.value!,
+            salonId: salonId,
+          );
+        } catch (e) {
+          debugPrint('Error uploading shop image to BunnyCDN: $e');
+        }
+      }
+
       final Map<String, dynamic> salonData = {
         'address': addressController.text.trim(),
         'categories': selectedCategories.toList(),
@@ -230,8 +258,9 @@ class RegistrationController extends GetxController {
         'reviews': 0,
         'salonId': salonId,
         'salonName': salonNameController.text.trim(),
+        'salonType': selectedSalonType.value.toLowerCase(), // 'male', 'female', 'unisex'
         'services': [],
-        'shopImage': "", // Intentionally left empty as requested
+        'shopImage': shopImageUrl,
       };
 
       // Save document to Firestore 'salons' collection
