@@ -154,7 +154,246 @@ class SlotService {
     return booked;
   }
 
-  // ── 3. Merged Slot List & Helpers ─────────────────────────────────────────
+  // ── 3. Duration & Continuous Slot Validation Helpers ─────────────────────
+
+  /// Parses various duration formats ("30 min", "1 hr", "1.5 hrs", "90 mins", "1 hr 30 min", 90) into total minutes.
+  /// Falls back to [fallbackServiceCount] * 30 min if no valid duration is found.
+  static int parseDurationMinutes(
+    dynamic raw, {
+    int fallbackServiceCount = 1,
+  }) {
+    if (raw is num) return raw.toInt() > 0 ? raw.toInt() : 30;
+    if (raw is String && raw.trim().isNotEmpty) {
+      final text = raw.trim().toLowerCase();
+
+      double total = 0;
+      bool matched = false;
+
+      // Match hours (e.g. "1.5 hrs", "1 hr", "2 hours", "1.5h")
+      final hrMatch = RegExp(r'(\d+(?:\.\d+)?)\s*(?:hr|hour|h\b)').firstMatch(text);
+      if (hrMatch != null) {
+        final val = double.tryParse(hrMatch.group(1) ?? '0') ?? 0;
+        total += val * 60;
+        matched = true;
+      }
+
+      // Match minutes (e.g. "30 min", "45 mins", "30m")
+      final minMatch = RegExp(r'(\d+)\s*(?:min|m\b)').firstMatch(text);
+      if (minMatch != null) {
+        final val = double.tryParse(minMatch.group(1) ?? '0') ?? 0;
+        total += val;
+        matched = true;
+      }
+
+      if (matched && total > 0) {
+        return total.round();
+      }
+
+      // Fallback: check if raw is a pure number string (e.g. "90")
+      final numeric = int.tryParse(text.replaceAll(RegExp(r'[^0-9]'), ''));
+      if (numeric != null && numeric > 0) {
+        return numeric;
+      }
+    }
+
+    final count = fallbackServiceCount > 0 ? fallbackServiceCount : 1;
+    return count * 30;
+  }
+
+  /// Formats duration in minutes into a clean display string (e.g. "30 min", "1 hr", "1.5 hrs", "2 hrs").
+  static String formatDurationDisplay(int minutes) {
+    if (minutes <= 0) return '30 min';
+    if (minutes < 60) return '$minutes min';
+
+    if (minutes % 60 == 0) {
+      final hrs = minutes ~/ 60;
+      return hrs == 1 ? '1 hr' : '$hrs hrs';
+    }
+
+    if (minutes % 30 == 0) {
+      final hrs = minutes / 60.0;
+      return '${hrs.toStringAsFixed(1).replaceAll('.0', '')} hrs';
+    }
+
+    final hrs = minutes ~/ 60;
+    final remMin = minutes % 60;
+    return hrs > 0 ? '$hrs hr $remMin min' : '$remMin min';
+  }
+
+  /// Calculates number of 30-minute consecutive slots required for [durationMinutes].
+  static int getRequiredSlotsCount(
+    int durationMinutes, {
+    int intervalMinutes = 30,
+  }) {
+    final count = (durationMinutes / intervalMinutes).ceil();
+    return count < 1 ? 1 : count;
+  }
+
+  /// Returns the continuous list of slot labels occupied starting at [startSlotLabel]
+  /// for a service of [durationMinutes].
+  static List<String> getOccupiedSlotLabels(
+    String startSlotLabel,
+    int durationMinutes,
+    List<String> allSlots, {
+    int intervalMinutes = 30,
+  }) {
+    final normStart = _normaliseTimeLabel(startSlotLabel);
+    final startIndex = allSlots.indexWhere(
+      (s) => _normaliseTimeLabel(s) == normStart,
+    );
+
+    if (startIndex == -1) return [startSlotLabel];
+
+    final requiredSlots = getRequiredSlotsCount(
+      durationMinutes,
+      intervalMinutes: intervalMinutes,
+    );
+
+    final endIndex = (startIndex + requiredSlots).clamp(0, allSlots.length);
+    return allSlots.sublist(startIndex, endIndex);
+  }
+
+  /// Evaluates continuous availability for each slot in [slots] given a service [durationMinutes].
+  ///
+  /// A slot cannot be selected as a starting slot if:
+  /// 1. The slot itself is locked/booked.
+  /// 2. Any consecutive slot within the required duration is locked/booked.
+  /// 3. There are not enough remaining consecutive slots before the salon closing time.
+  static List<TimeSlotModel> evaluateSlotsForDuration(
+    List<TimeSlotModel> slots,
+    int durationMinutes, {
+    int intervalMinutes = 30,
+  }) {
+    final requiredSlots = getRequiredSlotsCount(
+      durationMinutes,
+      intervalMinutes: intervalMinutes,
+    );
+
+    if (requiredSlots <= 1) {
+      return slots.map((s) {
+        return s.copyWith(
+          isAvailableForDuration: !s.isBooked,
+          conflictReason: s.isBooked ? 'Slot is already booked' : null,
+          isOverlappingLocked: false,
+          isClosingExceeded: false,
+        );
+      }).toList();
+    }
+
+    final List<TimeSlotModel> evaluated = [];
+
+    for (int i = 0; i < slots.length; i++) {
+      final current = slots[i];
+
+      // 1. If slot itself is booked
+      if (current.isBooked) {
+        evaluated.add(
+          current.copyWith(
+            isAvailableForDuration: false,
+            conflictReason: 'Slot is already booked',
+            isOverlappingLocked: false,
+            isClosingExceeded: false,
+          ),
+        );
+        continue;
+      }
+
+      // 2. Check if there are enough remaining slots before closing
+      if (i + requiredSlots > slots.length) {
+        final availableCount = slots.length - i;
+        evaluated.add(
+          current.copyWith(
+            isAvailableForDuration: false,
+            conflictReason:
+                'Not enough time before closing ($availableCount of $requiredSlots slots available)',
+            isOverlappingLocked: false,
+            isClosingExceeded: true,
+          ),
+        );
+        continue;
+      }
+
+      // 3. Check all consecutive slots within the required duration
+      String? lockedConflictLabel;
+      for (int k = 1; k < requiredSlots; k++) {
+        final nextSlot = slots[i + k];
+        if (nextSlot.isBooked) {
+          lockedConflictLabel = nextSlot.label;
+          break;
+        }
+      }
+
+      if (lockedConflictLabel != null) {
+        evaluated.add(
+          current.copyWith(
+            isAvailableForDuration: false,
+            conflictReason:
+                'Overlaps with locked slot at $lockedConflictLabel',
+            isOverlappingLocked: true,
+            isClosingExceeded: false,
+          ),
+        );
+      } else {
+        // Continuous block is fully available!
+        evaluated.add(
+          current.copyWith(
+            isAvailableForDuration: true,
+            conflictReason: null,
+            isOverlappingLocked: false,
+            isClosingExceeded: false,
+          ),
+        );
+      }
+    }
+
+    return evaluated;
+  }
+
+  /// Finds the **next available** slot strictly after [selectedLabel] that can accommodate
+  /// a continuous booking of [durationMinutes].
+  static TimeSlotModel? findNextAvailableForDuration(
+    List<TimeSlotModel> slots,
+    String selectedLabel,
+    int durationMinutes, {
+    int intervalMinutes = 30,
+  }) {
+    final evaluated = evaluateSlotsForDuration(
+      slots,
+      durationMinutes,
+      intervalMinutes: intervalMinutes,
+    );
+
+    final String normSelected = _normaliseTimeLabel(selectedLabel);
+
+    // Find the position of the conflicted slot
+    int startIndex = evaluated.indexWhere(
+      (s) => _normaliseTimeLabel(s.label) == normSelected,
+    );
+
+    if (startIndex == -1) {
+      final int? selectedMins = labelToMinutes(selectedLabel);
+      if (selectedMins != null) {
+        for (int i = 0; i < evaluated.length; i++) {
+          final int? slotMins = labelToMinutes(evaluated[i].label);
+          if (slotMins != null && slotMins >= selectedMins) {
+            startIndex = i;
+            break;
+          }
+        }
+      }
+    }
+
+    if (startIndex == -1) return null;
+
+    // Walk forward, find next slot that can accommodate the duration
+    for (int i = startIndex + 1; i < evaluated.length; i++) {
+      if (evaluated[i].isSelectable) return evaluated[i];
+    }
+
+    return null;
+  }
+
+  // ── 4. Merged Slot List & Helpers ─────────────────────────────────────────
 
   /// Returns a merged list of [TimeSlotModel]s from generated slots + booked times.
   static List<TimeSlotModel> mergeSlots(

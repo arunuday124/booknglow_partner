@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../controller/slot_controller.dart';
 import '../model/time_slot_model.dart';
+import '../service/slot_service.dart';
 
 /// Full-screen view showing real-time slot availability for the salon.
 /// Partners can see which time slots are locked/booked and which are free for any date.
@@ -78,6 +79,8 @@ class SlotAvailabilityView extends StatelessWidget {
               SliverToBoxAdapter(child: _DateSelectorSection()),
               // ── Operating Hours Banner ────────────────────────────────────
               SliverToBoxAdapter(child: _OperatingHoursBanner()),
+              // ── Service Duration Filter ───────────────────────────────────
+              SliverToBoxAdapter(child: _DurationSelectorSection()),
               // ── Stats Bar ─────────────────────────────────────────────────
               SliverToBoxAdapter(child: _StatsBar()),
               // ── Slot Grid ─────────────────────────────────────────────────
@@ -244,7 +247,7 @@ class _OperatingHoursBanner extends GetView<SlotController> {
               ),
               const Spacer(),
               Text(
-                '30 min slots',
+                '30 min intervals',
                 style: GoogleFonts.inter(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -254,6 +257,85 @@ class _OperatingHoursBanner extends GetView<SlotController> {
             ],
           ),
         ));
+  }
+}
+
+// ── Duration Selector Section ─────────────────────────────────────────────────
+
+class _DurationSelectorSection extends GetView<SlotController> {
+  const _DurationSelectorSection();
+
+  static const List<int> _durations = [30, 45, 60, 90, 120];
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 6.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.timelapse_rounded,
+                size: 14,
+                color: Color(0xFF4B5563),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Test Service Duration Overlap:',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF4B5563),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Obx(
+              () => Row(
+                children: _durations.map((duration) {
+                  final bool isSelected =
+                      controller.selectedDurationMinutes.value == duration;
+                  final String label =
+                      duration == 30 ? '30 min (1 slot)' : SlotService.formatDurationDisplay(duration);
+
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: ChoiceChip(
+                      label: Text(label),
+                      selected: isSelected,
+                      onSelected: (_) => controller.selectDuration(duration),
+                      selectedColor: const Color(0xFF041C16),
+                      backgroundColor: Colors.white,
+                      labelStyle: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color: isSelected ? Colors.white : const Color(0xFF374151),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(
+                          color: isSelected
+                              ? const Color(0xFF041C16)
+                              : const Color(0xFFE5E7EB),
+                        ),
+                      ),
+                      showCheckmark: false,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -269,24 +351,38 @@ class _StatsBar extends GetView<SlotController> {
       return Padding(
         padding:
             const EdgeInsets.symmetric(horizontal: 20.0, vertical: 6.0),
-        child: Row(
-          children: [
-            _StatChip(
-              label: '${controller.availableCount} Available',
-              bgColor: const Color(0xFFF0FDF4),
-              borderColor: const Color(0xFFBBF7D0),
-              textColor: const Color(0xFF15803D),
-              icon: Icons.check_circle_outline_rounded,
-            ),
-            const SizedBox(width: 10),
-            _StatChip(
-              label: '${controller.bookedCount} Booked',
-              bgColor: const Color(0xFFFEF2F2),
-              borderColor: const Color(0xFFFECACA),
-              textColor: const Color(0xFF991B1B),
-              icon: Icons.lock_outline_rounded,
-            ),
-          ],
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: [
+              _StatChip(
+                label: '${controller.availableCount} Available',
+                bgColor: const Color(0xFFF0FDF4),
+                borderColor: const Color(0xFFBBF7D0),
+                textColor: const Color(0xFF15803D),
+                icon: Icons.check_circle_outline_rounded,
+              ),
+              const SizedBox(width: 8),
+              _StatChip(
+                label: '${controller.bookedCount} Locked',
+                bgColor: const Color(0xFFFEF2F2),
+                borderColor: const Color(0xFFFECACA),
+                textColor: const Color(0xFF991B1B),
+                icon: Icons.lock_outline_rounded,
+              ),
+              if (controller.conflictCount > 0) ...[
+                const SizedBox(width: 8),
+                _StatChip(
+                  label: '${controller.conflictCount} Overlapping Conflict',
+                  bgColor: const Color(0xFFFFFBEB),
+                  borderColor: const Color(0xFFFDE68A),
+                  textColor: const Color(0xFFB45309),
+                  icon: Icons.warning_amber_rounded,
+                ),
+              ],
+            ],
+          ),
         ),
       );
     });
@@ -311,7 +407,7 @@ class _StatChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(10),
@@ -320,12 +416,12 @@ class _StatChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: textColor),
-          const SizedBox(width: 6),
+          Icon(icon, size: 13, color: textColor),
+          const SizedBox(width: 5),
           Text(
             label,
             style: GoogleFonts.inter(
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
               color: textColor,
             ),
@@ -421,75 +517,142 @@ class _SlotGridSliver extends GetView<SlotController> {
 
 // ── Individual Slot Tile ───────────────────────────────────────────────────────
 
-class _SlotTile extends StatelessWidget {
+class _SlotTile extends GetView<SlotController> {
   final TimeSlotModel slot;
 
   const _SlotTile({required this.slot});
 
   @override
   Widget build(BuildContext context) {
-    final bool booked = slot.isBooked;
+    final bool isDirectlyBooked = slot.isBooked;
+    final bool isConflict = !isDirectlyBooked && !slot.isAvailableForDuration;
+    final bool isAvailable = slot.isSelectable;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        color: booked
-            ? const Color(0xFFF9FAFB)
-            : const Color(0xFFF0FDF4),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: booked
-              ? const Color(0xFFE5E7EB)
-              : const Color(0xFF86EFAC),
-          width: booked ? 1 : 1.5,
+    final Color bgColor = isDirectlyBooked
+        ? const Color(0xFFF9FAFB)
+        : (isConflict
+            ? const Color(0xFFFFFBEB)
+            : const Color(0xFFF0FDF4));
+
+    final Color borderColor = isDirectlyBooked
+        ? const Color(0xFFE5E7EB)
+        : (isConflict
+            ? const Color(0xFFFCD34D)
+            : const Color(0xFF86EFAC));
+
+    final Color textColor = isDirectlyBooked
+        ? const Color(0xFF9CA3AF)
+        : (isConflict
+            ? const Color(0xFFB45309)
+            : const Color(0xFF15803D));
+
+    final String statusText = isDirectlyBooked
+        ? 'Locked'
+        : (isConflict
+            ? (slot.isOverlappingLocked ? 'Overlaps' : 'No Time')
+            : 'Available');
+
+    final IconData icon = isDirectlyBooked
+        ? Icons.lock_rounded
+        : (isConflict
+            ? Icons.warning_amber_rounded
+            : Icons.check_circle_rounded);
+
+    return InkWell(
+      onTap: () {
+        final durationLabel =
+            SlotService.formatDurationDisplay(controller.selectedDurationMinutes.value);
+        if (isDirectlyBooked) {
+          Get.snackbar(
+            'Slot Locked',
+            '${slot.label} is directly booked and locked.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: const Color(0xFF991B1B),
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+            margin: const EdgeInsets.all(16),
+            borderRadius: 12,
+            icon: const Icon(Icons.lock_outline, color: Colors.white),
+          );
+        } else if (isConflict) {
+          Get.snackbar(
+            'Slot Unavailable for $durationLabel',
+            '${slot.label} cannot be selected because ${slot.conflictReason ?? 'a continuous slot is locked'}. Continuous slots are required.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: const Color(0xFFB45309),
+            colorText: Colors.white,
+            duration: const Duration(seconds: 4),
+            margin: const EdgeInsets.all(16),
+            borderRadius: 12,
+            icon: const Icon(Icons.warning_amber_rounded, color: Colors.white),
+          );
+        } else {
+          final reqSlots =
+              SlotService.getRequiredSlotsCount(controller.selectedDurationMinutes.value);
+          Get.snackbar(
+            'Slot Available',
+            '${slot.label} is fully available for $durationLabel ($reqSlots continuous slots).',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: const Color(0xFF15803D),
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+            margin: const EdgeInsets.all(16),
+            borderRadius: 12,
+            icon: const Icon(Icons.check_circle_outline, color: Colors.white),
+          );
+        }
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: borderColor,
+            width: isDirectlyBooked ? 1 : 1.5,
+          ),
+          boxShadow: isAvailable
+              ? const [
+                  BoxShadow(
+                    color: Color(0x1422C55E),
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
-        boxShadow: booked
-            ? null
-            : const [
-                BoxShadow(
-                  color: Color(0x1422C55E),
-                  blurRadius: 4,
-                  offset: Offset(0, 2),
-                ),
-              ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            booked
-                ? Icons.lock_rounded
-                : Icons.check_circle_rounded,
-            size: 13,
-            color: booked
-                ? const Color(0xFFD1D5DB)
-                : const Color(0xFF16A34A),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            slot.label,
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: booked
-                ? const Color(0xFF9CA3AF)
-                : const Color(0xFF15803D),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              size: 13,
+              color: textColor,
             ),
-          ),
-          const SizedBox(height: 1),
-          Text(
-            booked ? 'Booked' : 'Free',
-            style: GoogleFonts.inter(
-              fontSize: 9,
-              fontWeight: FontWeight.w500,
-              color: booked
-                  ? const Color(0xFFD1D5DB)
-                  : const Color(0xFF86EFAC),
+            const SizedBox(height: 3),
+            Text(
+              slot.label,
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: textColor,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 1),
+            Text(
+              statusText,
+              style: GoogleFonts.inter(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
+

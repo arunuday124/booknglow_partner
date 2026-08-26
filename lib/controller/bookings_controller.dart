@@ -549,15 +549,59 @@ class BookingsController extends GetxController {
     }
 
     try {
-      // 1. Check if another booking on the same salon + date + time has isLocked == true
-      final hasConflict = _allPendingBookings.any(
-        (b) =>
-            b.id != booking.id &&
-            b.isLocked &&
-            SlotService.isSameDate(b.date, booking.date) &&
-            SlotService.normaliseTimeLabel(b.time) ==
-                SlotService.normaliseTimeLabel(booking.time),
+      final String salonId = booking.salonId.isNotEmpty
+          ? booking.salonId
+          : currentSalonId;
+
+      // 1. Get salon operating hours
+      TimeOfDay opening = const TimeOfDay(hour: 10, minute: 0);
+      TimeOfDay closing = const TimeOfDay(hour: 20, minute: 0);
+      if (Get.isRegistered<ProfileController>()) {
+        final profile = Get.find<ProfileController>();
+        if (profile.openingTime.value != null &&
+            profile.closingTime.value != null) {
+          opening = profile.openingTime.value!;
+          closing = profile.closingTime.value!;
+        }
+      } else {
+        try {
+          final salonDoc = await _firestore
+              .collection('salons')
+              .doc(salonId)
+              .get();
+          if (salonDoc.exists && salonDoc.data() != null) {
+            final data = salonDoc.data()!;
+            final String openStr = (data['openingHours'] ?? '10:00 AM')
+                .toString();
+            final String closeStr = (data['closingHours'] ?? '08:00 PM')
+                .toString();
+            opening = _parseTimeOfDay(openStr) ?? opening;
+            closing = _parseTimeOfDay(closeStr) ?? closing;
+          }
+        } catch (_) {}
+      }
+
+      final allSlots = SlotService.generateSlots(opening, closing);
+      final occupiedSlots = SlotService.getOccupiedSlotLabels(
+        booking.time,
+        booking.totalDurationMinutes,
+        allSlots,
       );
+
+      // Check if ANY continuous slot needed for this booking is locked by another booking
+      final bookedTimes = SlotService.extractBookedTimesFromModels(
+        _allPendingBookings,
+        booking.date,
+        excludeBookingId: booking.id,
+      );
+
+      final hasConflict = occupiedSlots.any((occupiedLabel) {
+        return bookedTimes.any(
+          (bTime) =>
+              SlotService.normaliseTimeLabel(bTime) ==
+              SlotService.normaliseTimeLabel(occupiedLabel),
+        );
+      });
 
       if (hasConflict) {
         throw SlotAlreadyBookedException(booking.time);
@@ -584,7 +628,7 @@ class BookingsController extends GetxController {
 
       Get.snackbar(
         'Booking Confirmed',
-        'Appointment for ${booking.clientName} at ${booking.time} confirmed.',
+        'Appointment for ${booking.clientName} at ${booking.time} (${booking.formattedDuration}) confirmed.',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: const Color(0xFF041C16),
         colorText: Colors.white,
@@ -634,12 +678,17 @@ class BookingsController extends GetxController {
       final bookedTimes = SlotService.extractBookedTimesFromModels(
         _allPendingBookings,
         booking.date,
+        excludeBookingId: booking.id,
       );
 
       // Generate slots using the salon's real hours so order and coverage match
       final allSlots = SlotService.generateSlots(opening, closing);
       final merged = SlotService.mergeSlots(allSlots, bookedTimes);
-      final next = SlotService.findNextAvailable(merged, booking.time);
+      final next = SlotService.findNextAvailableForDuration(
+        merged,
+        booking.time,
+        booking.totalDurationMinutes,
+      );
 
       _showSlotConflictDialog(booking, next?.label);
     } catch (e) {
@@ -678,7 +727,7 @@ class BookingsController extends GetxController {
   }
 
   /// Shows a dialog informing the partner about a slot conflict and suggesting
-  /// the next available slot.
+  /// the next available slot that can fit the full duration.
   void _showSlotConflictDialog(BookingModel booking, String? nextSlot) {
     Get.dialog(
       Dialog(
@@ -704,7 +753,7 @@ class BookingsController extends GetxController {
               ),
               const SizedBox(height: 16),
               Text(
-                'Slot Already Booked',
+                'Slot Conflict Detected',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.playfairDisplay(
                   fontSize: 20,
@@ -714,7 +763,7 @@ class BookingsController extends GetxController {
               ),
               const SizedBox(height: 10),
               Text(
-                'The ${booking.time} slot on ${booking.date} has just been booked by another customer.',
+                'The appointment starting at ${booking.time} on ${booking.date} (${booking.formattedDuration}) conflicts with locked continuous slots.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(
                   fontSize: 14,

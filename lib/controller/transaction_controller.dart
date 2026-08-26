@@ -137,13 +137,6 @@ class TransactionController extends GetxController {
           loadedMap[idKey] = TransactionModel.fromMap(data, idKey);
         }
 
-        // 3. Merge with transactions collection docs
-        for (var doc in txnQuery.docs) {
-          final data = doc.data() as Map<String, dynamic>;
-          final String idKey = (data['bookingId'] ?? doc.id).toString();
-          loadedMap[idKey] = TransactionModel.fromMap(data, idKey);
-        }
-
         transactions.assignAll(loadedMap.values.toList());
       } else {
         transactions.clear();

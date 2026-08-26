@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../service/slot_service.dart';
 
 class BookingModel {
   final String id;
@@ -19,6 +20,7 @@ class BookingModel {
   final String userId;
   final dynamic createdAt;
   final bool isLocked;
+  final int durationMinutes;
 
   BookingModel({
     required this.id,
@@ -38,6 +40,7 @@ class BookingModel {
     this.userId = '',
     this.createdAt,
     this.isLocked = false,
+    this.durationMinutes = 0,
   }) : initials = initials ?? _generateInitials(clientName),
        _services = services != null
            ? List<String>.from(services)
@@ -70,6 +73,23 @@ class BookingModel {
     final bool locked = data['isLocked'] == true ||
         (data['isLocked']?.toString().toLowerCase() == 'true');
 
+    // Parse duration in minutes
+    final serviceNames = parsedServices['names'] as List<String>;
+    final parsedDuration = parsedServices['durationMinutes'] as int;
+    final int explicitDuration = SlotService.parseDurationMinutes(
+      data['durationMinutes'] ??
+          data['duration'] ??
+          data['totalDuration'] ??
+          data['serviceDuration'],
+      fallbackServiceCount: serviceNames.isNotEmpty ? serviceNames.length : 1,
+    );
+
+    final int finalDuration = parsedDuration > 0
+        ? parsedDuration
+        : (explicitDuration > 0
+            ? explicitDuration
+            : (serviceNames.isNotEmpty ? serviceNames.length * 30 : 30));
+
     return BookingModel(
       id: docId,
       clientName: name,
@@ -84,7 +104,7 @@ class BookingModel {
                   data['slotDate'])
               ?.toString() ??
           '',
-      services: parsedServices['names'] as List<String>,
+      services: serviceNames,
       totalPrice: calculatedPrice,
       notes: data['notes']?.toString(),
       status:
@@ -100,6 +120,7 @@ class BookingModel {
       userId: data['userId']?.toString() ?? '',
       createdAt: data['createdAt'],
       isLocked: locked,
+      durationMinutes: finalDuration,
     );
   }
 
@@ -125,6 +146,7 @@ class BookingModel {
   static Map<String, dynamic> _parseServices(dynamic rawServices) {
     final List<String> serviceNames = [];
     double total = 0.0;
+    int totalDuration = 0;
     if (rawServices is List) {
       for (var item in rawServices) {
         if (item is Map) {
@@ -143,12 +165,24 @@ class BookingModel {
               item['amount'] ??
               item['priceTotal'];
           total += _parsePrice(priceVal);
+
+          final itemDur = item['duration'] ?? item['durationMinutes'];
+          if (itemDur != null) {
+            totalDuration += SlotService.parseDurationMinutes(itemDur, fallbackServiceCount: 1);
+          } else {
+            totalDuration += 30;
+          }
         } else if (item is String) {
           serviceNames.add(item);
+          totalDuration += 30;
         }
       }
     }
-    return {'names': serviceNames, 'total': total};
+    return {
+      'names': serviceNames,
+      'total': total,
+      'durationMinutes': totalDuration,
+    };
   }
 
   /// Getter for services guaranteed to return a non-null List of strings
@@ -157,6 +191,16 @@ class BookingModel {
 
   /// Convenient getter to join multiple services into a readable string
   String get serviceName => services.isEmpty ? '' : services.join(' & ');
+
+  /// Total duration in minutes (guaranteed >= 30)
+  int get totalDurationMinutes =>
+      durationMinutes > 0 ? durationMinutes : (services.isNotEmpty ? services.length * 30 : 30);
+
+  /// Human-readable duration format (e.g. "30 min", "1 hr", "1.5 hrs", "2 hrs")
+  String get formattedDuration => SlotService.formatDurationDisplay(totalDurationMinutes);
+
+  /// Number of 30-minute consecutive slots required for this booking
+  int get requiredSlotsCount => SlotService.getRequiredSlotsCount(totalDurationMinutes);
 
   BookingModel copyWith({
     String? id,
@@ -176,6 +220,7 @@ class BookingModel {
     String? userId,
     dynamic createdAt,
     bool? isLocked,
+    int? durationMinutes,
   }) {
     return BookingModel(
       id: id ?? this.id,
@@ -195,6 +240,8 @@ class BookingModel {
       userId: userId ?? this.userId,
       createdAt: createdAt ?? this.createdAt,
       isLocked: isLocked ?? this.isLocked,
+      durationMinutes: durationMinutes ?? this.durationMinutes,
     );
   }
 }
+

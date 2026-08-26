@@ -333,12 +333,15 @@ class _BookingCardWidget extends GetView<BookingsController> {
                               color: Color(0xFF041C16),
                             ),
                             const SizedBox(width: 8),
-                            Text(
-                              '${booking.time}  •  ${booking.date}',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF041C16),
+                            Flexible(
+                              child: Text(
+                                '${booking.time}  •  ${booking.date}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF041C16),
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],

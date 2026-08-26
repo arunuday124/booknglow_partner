@@ -294,12 +294,15 @@ class _AllBookingCardItem extends GetView<BookingsController> {
                               color: Color(0xFF92400E),
                             ),
                             const SizedBox(width: 8),
-                            Text(
-                              '${booking.time}  •  ${booking.date}',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF7C2D12),
+                            Flexible(
+                              child: Text(
+                                '${booking.time}  •  ${booking.date}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF7C2D12),
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],

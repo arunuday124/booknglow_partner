@@ -22,6 +22,8 @@ class SlotController extends GetxController {
   final RxList<TimeSlotModel> slots = <TimeSlotModel>[].obs;
   final RxBool isLoading = true.obs;
 
+  final RxInt selectedDurationMinutes = 30.obs;
+
   final Rx<TimeOfDay> openingTime = const TimeOfDay(hour: 10, minute: 0).obs;
   final Rx<TimeOfDay> closingTime = const TimeOfDay(hour: 20, minute: 0).obs;
 
@@ -51,6 +53,12 @@ class SlotController extends GetxController {
   /// Change the selected date — recomputes slots instantly from in-memory cache (0 network calls)
   void selectDate(DateTime date) {
     selectedDate.value = date;
+    _recomputeSlots();
+  }
+
+  /// Change the selected duration filter — recomputes slots and continuous conflict availability
+  void selectDuration(int minutes) {
+    selectedDurationMinutes.value = minutes;
     _recomputeSlots();
   }
 
@@ -87,11 +95,15 @@ class SlotController extends GetxController {
     }
   }
 
-  /// Number of available (not locked) slots.
-  int get availableCount => slots.where((s) => !s.isBooked).length;
+  /// Number of available starting slots for the selected duration.
+  int get availableCount => slots.where((s) => s.isSelectable).length;
 
-  /// Number of booked / locked slots.
+  /// Number of directly booked / locked slots.
   int get bookedCount => slots.where((s) => s.isBooked).length;
+
+  /// Number of slots unavailable due to duration overlap with a locked slot or closing time.
+  int get conflictCount =>
+      slots.where((s) => !s.isBooked && !s.isAvailableForDuration).length;
 
   /// Formatted date string for display (e.g. "Mon, Aug 11").
   String get formattedDate {
@@ -134,9 +146,13 @@ class SlotController extends GetxController {
     return '${months[d.month - 1]} ${d.day}, ${d.year}';
   }
 
-  /// Find the next available slot after [label].
+  /// Find the next available slot after [label] that accommodates selected duration.
   TimeSlotModel? nextAvailableAfter(String label) {
-    return SlotService.findNextAvailable(slots, label);
+    return SlotService.findNextAvailableForDuration(
+      slots,
+      label,
+      selectedDurationMinutes.value,
+    );
   }
 
   // ── Private ───────────────────────────────────────────────────────────────
@@ -236,7 +252,13 @@ class SlotController extends GetxController {
       firestoreDateString,
     );
 
-    slots.assignAll(SlotService.mergeSlots(generatedSlots, bookedTimes));
+    final merged = SlotService.mergeSlots(generatedSlots, bookedTimes);
+    final evaluated = SlotService.evaluateSlotsForDuration(
+      merged,
+      selectedDurationMinutes.value,
+    );
+
+    slots.assignAll(evaluated);
   }
 
   static TimeOfDay? _parseTimeLabel(String raw) {

@@ -163,8 +163,12 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
       );
 
       final merged = SlotService.mergeSlots(generated, bookedTimes);
+      final evaluated = SlotService.evaluateSlotsForDuration(
+        merged,
+        widget.booking.totalDurationMinutes,
+      );
       final upcomingOnly =
-          SlotService.filterUpcomingSlots(merged, _selectedDate);
+          SlotService.filterUpcomingSlots(evaluated, _selectedDate);
 
       setState(() {
         _slots = upcomingOnly;
@@ -172,7 +176,7 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
         // If current selectedSlotLabel is no longer available on this date, reset it
         if (_selectedSlotLabel != null) {
           final found = upcomingOnly.firstWhereOrNull(
-            (s) => s.label == _selectedSlotLabel && !s.isBooked,
+            (s) => s.label == _selectedSlotLabel && s.isSelectable,
           );
           if (found == null) {
             _selectedSlotLabel = null;
@@ -251,6 +255,23 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
 
   Future<void> _handleConfirmReschedule() async {
     if (_selectedSlotLabel == null || _isSubmitting) return;
+
+    final selectedSlot =
+        _slots.firstWhereOrNull((s) => s.label == _selectedSlotLabel);
+    if (selectedSlot == null || !selectedSlot.isSelectable) {
+      Get.snackbar(
+        'Invalid Slot Selection',
+        '${_selectedSlotLabel ?? 'The selected slot'} cannot accommodate this ${widget.booking.formattedDuration} appointment (${selectedSlot?.conflictReason ?? 'conflicts with a locked slot'}).',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: const Color(0xFFB45309),
+        colorText: Colors.white,
+        margin: const EdgeInsets.all(16),
+        borderRadius: 12,
+        duration: const Duration(seconds: 4),
+        icon: const Icon(Icons.warning_amber_rounded, color: Colors.white),
+      );
+      return;
+    }
 
     setState(() => _isSubmitting = true);
     final bookingsCtrl = Get.find<BookingsController>();
@@ -345,71 +366,111 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF9FAFB),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: const Color(0xFFE5E7EB)),
                 ),
-                child: Row(
+                child: Column(
                   children: [
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF041C16),
-                        shape: BoxShape.circle,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        widget.booking.initials,
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFFEFE0D3),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.booking.clientName,
+                    Row(
+                      children: [
+                        Container(
+                          width: 38,
+                          height: 38,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF041C16),
+                            shape: BoxShape.circle,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            widget.booking.initials,
                             style: GoogleFonts.inter(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFF1F2937),
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFFEFE0D3),
                             ),
                           ),
-                          Text(
-                            widget.booking.serviceName.isNotEmpty
-                                ? widget.booking.serviceName
-                                : 'Salon Service',
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.booking.clientName,
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF1F2937),
+                                ),
+                              ),
+                              Text(
+                                '${widget.booking.serviceName.isNotEmpty ? widget.booking.serviceName : 'Salon Service'}  •  ${widget.booking.formattedDuration}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFF6B7280),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Current: ${widget.booking.time}',
                             style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: const Color(0xFF6B7280),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF92400E),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF3C7),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'Current: ${widget.booking.time}',
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF92400E),
+                    if (widget.booking.totalDurationMinutes > 30) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFFBEB),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFFDE68A)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.info_outline_rounded,
+                              size: 14,
+                              color: Color(0xFF92400E),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Service duration is ${widget.booking.formattedDuration}. Requires ${widget.booking.requiredSlotsCount} continuous available slots.',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF92400E),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -667,38 +728,94 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
                             crossAxisCount: 3,
                             mainAxisSpacing: 10,
                             crossAxisSpacing: 10,
-                            childAspectRatio: 2.3,
+                            childAspectRatio: 2.1,
                           ),
                           itemCount: _slots.length,
                           itemBuilder: (context, index) {
                             final slot = _slots[index];
-                            final bool isBooked = slot.isBooked;
+                            final bool isDirectlyBooked = slot.isBooked;
+                            final bool isConflict =
+                                !isDirectlyBooked && !slot.isAvailableForDuration;
                             final bool isSelected =
                                 _selectedSlotLabel == slot.label;
 
+                            final Color bgColor = isSelected
+                                ? const Color(0xFF041C16)
+                                : (isDirectlyBooked
+                                    ? const Color(0xFFF3F4F6)
+                                    : (isConflict
+                                        ? const Color(0xFFFFFBEB)
+                                        : const Color(0xFFF0FDF4)));
+
+                            final Color borderColor = isSelected
+                                ? const Color(0xFF041C16)
+                                : (isDirectlyBooked
+                                    ? const Color(0xFFE5E7EB)
+                                    : (isConflict
+                                        ? const Color(0xFFFCD34D)
+                                        : const Color(0xFF86EFAC)));
+
+                            final Color textColor = isSelected
+                                ? Colors.white
+                                : (isDirectlyBooked
+                                    ? const Color(0xFF9CA3AF)
+                                    : (isConflict
+                                        ? const Color(0xFFB45309)
+                                        : const Color(0xFF15803D)));
+
+                            final IconData icon = isSelected
+                                ? Icons.check_circle_rounded
+                                : (isDirectlyBooked
+                                    ? Icons.lock_rounded
+                                    : (isConflict
+                                        ? Icons.warning_amber_rounded
+                                        : Icons.access_time_rounded));
+
                             return GestureDetector(
-                              onTap: isBooked
-                                  ? null
-                                  : () {
-                                      setState(() {
-                                        _selectedSlotLabel = slot.label;
-                                      });
-                                    },
+                              onTap: () {
+                                if (isDirectlyBooked) {
+                                  Get.snackbar(
+                                    'Slot Locked',
+                                    '${slot.label} is directly booked and locked.',
+                                    snackPosition: SnackPosition.BOTTOM,
+                                    backgroundColor: const Color(0xFF991B1B),
+                                    colorText: Colors.white,
+                                    duration: const Duration(seconds: 3),
+                                    margin: const EdgeInsets.all(16),
+                                    borderRadius: 12,
+                                    icon: const Icon(
+                                      Icons.lock_outline,
+                                      color: Colors.white,
+                                    ),
+                                  );
+                                } else if (isConflict) {
+                                  Get.snackbar(
+                                    'Cannot Select ${slot.label}',
+                                    'A ${widget.booking.formattedDuration} service starting at ${slot.label} cannot be selected because ${slot.conflictReason ?? 'it overlaps with a locked slot'}. Continuous slots are required.',
+                                    snackPosition: SnackPosition.BOTTOM,
+                                    backgroundColor: const Color(0xFFB45309),
+                                    colorText: Colors.white,
+                                    duration: const Duration(seconds: 4),
+                                    margin: const EdgeInsets.all(16),
+                                    borderRadius: 12,
+                                    icon: const Icon(
+                                      Icons.warning_amber_rounded,
+                                      color: Colors.white,
+                                    ),
+                                  );
+                                } else {
+                                  setState(() {
+                                    _selectedSlotLabel = slot.label;
+                                  });
+                                }
+                              },
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 180),
                                 decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? const Color(0xFF041C16)
-                                      : isBooked
-                                          ? const Color(0xFFF3F4F6)
-                                          : const Color(0xFFF0FDF4),
+                                  color: bgColor,
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                    color: isSelected
-                                        ? const Color(0xFF041C16)
-                                        : isBooked
-                                            ? const Color(0xFFE5E7EB)
-                                            : const Color(0xFF86EFAC),
+                                    color: borderColor,
                                     width: isSelected ? 1.5 : 1,
                                   ),
                                   boxShadow: isSelected
@@ -711,35 +828,42 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
                                         ]
                                       : null,
                                 ),
-                                child: Row(
+                                child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(
-                                      isSelected
-                                          ? Icons.check_circle_rounded
-                                          : isBooked
-                                              ? Icons.lock_rounded
-                                              : Icons.access_time_rounded,
-                                      size: 13,
-                                      color: isSelected
-                                          ? Colors.white
-                                          : isBooked
-                                              ? const Color(0xFF9CA3AF)
-                                              : const Color(0xFF16A34A),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          icon,
+                                          size: 13,
+                                          color: textColor,
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Text(
+                                          slot.label,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: textColor,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 5),
-                                    Text(
-                                      slot.label,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: isSelected
-                                            ? Colors.white
-                                            : isBooked
-                                                ? const Color(0xFF9CA3AF)
-                                                : const Color(0xFF15803D),
+                                    if (isConflict && !isSelected) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        slot.isOverlappingLocked
+                                            ? 'Overlaps'
+                                            : 'No Time',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFFB45309),
+                                        ),
                                       ),
-                                    ),
+                                    ],
                                   ],
                                 ),
                               ),
@@ -782,12 +906,15 @@ class _RescheduleBottomSheetState extends State<RescheduleBottomSheet> {
                               color: Color(0xFF15803D),
                             ),
                             const SizedBox(width: 6),
-                            Text(
-                              'New Time: $_selectedSlotLabel  •  ${_formatDateDisplay(_selectedDate)}',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: const Color(0xFF15803D),
+                            Flexible(
+                              child: Text(
+                                'New Time: $_selectedSlotLabel  •  ${widget.booking.formattedDuration}  •  ${_formatDateDisplay(_selectedDate)}',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF15803D),
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
